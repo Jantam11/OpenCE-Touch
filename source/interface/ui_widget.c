@@ -5883,8 +5883,19 @@ static void ui_widgets_process_mouse(
 	struct halo_ui_pointer pointer;
 	struct ui_mouse_target *target;
 	short controller_index = 0;
+	int pointer_active = halo_ui_pointer_update(ui_mouse_menus_active() || virtual_keyboard_active(), &pointer);
+	if (pointer_active && virtual_keyboard_active())
+	{
+		extern void virtual_keyboard_pointer(short x, short y, int select, int cancel);
+		if (pointer.moved || pointer.left_clicks || pointer.right_clicks)
+			virtual_keyboard_pointer(pointer.left_clicks ? pointer.click_x : pointer.x,
+				pointer.left_clicks ? pointer.click_y : pointer.y,
+				pointer.left_clicks != 0, pointer.right_clicks != 0);
+		/* The keyboard may close above; never also click the screen below it. */
+		pointer_active = 0;
+	}
 
-	if (!halo_ui_pointer_update(ui_mouse_menus_active(), &pointer) ||
+	if (!pointer_active ||
 		virtual_keyboard_active())
 	{
 		ui_mouse_press_count = 0;

@@ -1159,6 +1159,30 @@ static boolean virtual_keyboard_select(
 
 /* port: the characters and backspaces typed on the computer's keyboard,
 as its keys would put them (the first replacing the text it began with) */
+/* Pointer coordinates have already been converted from the display to the
+ * game's 640x480 UI by halo_ui_pointer_update. Use the actual drawn key
+ * rectangles, so DONE, backspace, shifts and letters work alike. */
+void virtual_keyboard_pointer(short x, short y, int select, int cancel)
+{
+	int key, row, column;
+	if (!virtual_keyboard_globals.active) return;
+	if (cancel) { virtual_keyboard_cancel(); return; }
+	for (key = 0; key < NUMBER_OF_VIRTUAL_KEYS; key++)
+	{
+		rectangle2d *bounds = &keyboard_rect[key];
+		if (x < bounds->x0 || x >= bounds->x1 || y < bounds->y0 || y >= bounds->y1) continue;
+		for (row = 0; row < VIRTUAL_KEYBOARD_ROW_COUNT; row++)
+			for (column = 0; column < VIRTUAL_KEYBOARD_COLUMN_COUNT; column++)
+				if (virtual_keyboard_layout_table[row][column] == key)
+				{
+					virtual_keyboard_globals.row = (short)row;
+					virtual_keyboard_globals.column = (short)column;
+					if (select) virtual_keyboard_select();
+					return;
+				}
+	}
+}
+
 static void virtual_keyboard_port_type(
 	void)
 {
