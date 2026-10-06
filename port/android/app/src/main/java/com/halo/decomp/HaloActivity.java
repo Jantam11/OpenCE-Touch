@@ -15,6 +15,7 @@ import org.libsdl.app.SDLActivity;
 public class HaloActivity extends SDLActivity {
     /** lets system link's broadcasts in over Wi-Fi while the game runs */
     private WifiManager.MulticastLock multicastLock;
+    private TouchControls touchControls;
 
     @Override
     protected String[] getLibraries() {
@@ -27,16 +28,33 @@ public class HaloActivity extends SDLActivity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         preferHighestRefreshRate();
         acquireMulticastLock();
+        touchControls = new TouchControls(this);
+        addContentView(touchControls, new android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT));
         // a new version looked for while the game starts
         Updater.start(this);
     }
 
     @Override
     protected void onDestroy() {
+        if (touchControls != null) touchControls.releaseAll();
         if (multicastLock != null && multicastLock.isHeld())
             multicastLock.release();
         multicastLock = null;
         super.onDestroy();
+    }
+
+    @Override
+    protected void onPause() {
+        if (touchControls != null) touchControls.releaseAll();
+        super.onPause();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        if (!hasFocus && touchControls != null) touchControls.releaseAll();
+        super.onWindowFocusChanged(hasFocus);
     }
 
     /**
