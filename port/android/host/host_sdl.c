@@ -85,7 +85,10 @@ static void *handle_get(uint32_t handle, int type)
 
 int host_sdl_init(uint32_t flags)
 {
-	return SDL_Init((SDL_InitFlags)flags);
+	int initialized = SDL_Init((SDL_InitFlags)flags);
+	extern void host_touch_initialize(void);
+	if (initialized) host_touch_initialize();
+	return initialized;
 }
 
 int host_sdl_set_hint(const char *name, const char *value)
@@ -236,6 +239,17 @@ int host_sdl_gamepad_type(uint32_t gamepad)
 	SDL_Gamepad *object = handle_get(gamepad, _handle_gamepad);
 
 	return object ? SDL_GetGamepadType(object) : SDL_GAMEPAD_TYPE_UNKNOWN;
+}
+
+uint32_t host_sdl_gamepad_id(uint32_t gamepad)
+{
+	SDL_Gamepad *object = handle_get(gamepad, _handle_gamepad);
+	return object ? SDL_GetGamepadID(object) : 0;
+}
+
+int host_sdl_is_virtual_joystick(uint32_t id)
+{
+	return SDL_IsJoystickVirtual((SDL_JoystickID)id);
 }
 
 int host_sdl_rumble_gamepad(uint32_t gamepad, uint32_t low, uint32_t high, uint32_t milliseconds)
