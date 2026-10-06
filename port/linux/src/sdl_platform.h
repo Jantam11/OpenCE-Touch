@@ -85,7 +85,6 @@ void platform_mouse_capture(BOOL capture);
 void platform_pump_events(void);
 /* a snapshot of the input state; consume_motion resets the mouse deltas */
 void platform_input_read(struct platform_input_state *state, BOOL consume_motion);
-#ifndef HALO_ANDROID
 /* the pointer in the menus (d3d8_gl.c, halo_ui_pointer_update) */
 struct platform_ui_pointer
 {
@@ -99,7 +98,6 @@ struct platform_ui_pointer
 void platform_ui_pointer_set_active(BOOL active);
 BOOL platform_ui_pointer_read(struct platform_ui_pointer *pointer);
 void platform_video_window_size(int *width, int *height);
-#endif
 BOOL platform_next_keystroke(struct platform_keystroke *keystroke);
 /* the multiplayer scoreboard (game_engine.c) open or not: while it is, the
 mouse wheel and Page Up/Down scroll it instead of switching weapons; how

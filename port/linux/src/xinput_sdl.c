@@ -229,6 +229,9 @@ void platform_text_typing(int typing)
 {
 	text_typing_keyboard = typing != 0;
 	text_typing_update();
+#ifdef HALO_ANDROID
+	SDL_SetHint("OPEN_CE_TOUCH_KEYBOARD", typing ? "1" : "0");
+#endif
 }
 
 void platform_text_field(int typing)
@@ -251,6 +254,9 @@ static void typing_gamepad(const struct platform_input_state *input, XINPUT_GAME
 	else if (text_typing_enter_armed)
 		pad->wButtons |= XINPUT_GAMEPAD_START;
 	pad->bAnalogButtons[XINPUT_GAMEPAD_B] |= analog(k[SDL_SCANCODE_ESCAPE]);
+#ifdef HALO_ANDROID
+	pad->bAnalogButtons[XINPUT_GAMEPAD_B] |= analog(k[SDL_SCANCODE_AC_BACK]);
+#endif
 }
 
 static void keyboard_gamepad(const struct platform_input_state *input, XINPUT_GAMEPAD *pad)
@@ -607,19 +613,23 @@ static int sdl_gamepads(SDL_Gamepad *gamepads[PORT_COUNT])
 		recognised controllers take the first ports */
 		int pass;
 
-		for (pass = 0; pass < 2; pass++)
+		/* The touchscreen stays on player 1, including split-screen lobbies;
+		physical controllers follow it in their normal order. */
+		for (pass = 0; pass < 3; pass++)
 		{
 			for (index = 0; index < count && found < PORT_COUNT; index++)
 			{
 				SDL_Gamepad *gamepad = SDL_GetGamepadFromID(ids[index]);
 				SDL_GamepadType type;
 				BOOL recognised;
+				BOOL virtual_pad;
 
 				if (!gamepad)
 					continue;
 				type = SDL_GetGamepadType(gamepad);
 				recognised = type != SDL_GAMEPAD_TYPE_UNKNOWN && type != SDL_GAMEPAD_TYPE_STANDARD;
-				if (recognised == (pass == 0))
+				virtual_pad = SDL_IsJoystickVirtual(SDL_GetGamepadID(gamepad));
+				if (virtual_pad ? pass == 0 : pass == (recognised ? 1 : 2))
 					gamepads[found++] = gamepad;
 			}
 		}
@@ -667,6 +677,10 @@ static SDL_Gamepad *port_gamepad(SDL_Gamepad *gamepads[PORT_COUNT], int count, i
 {
 	if (count == 1)
 	{
+#ifdef HALO_ANDROID
+		if (SDL_IsJoystickVirtual(SDL_GetGamepadID(gamepads[0])))
+			return port == 0 ? gamepads[0] : NULL;
+#endif
 		BOOL split = pc_menu_split_players() != 0;
 
 		if (split != lone_gamepad_split && gamepad_idle(gamepads[0]))
