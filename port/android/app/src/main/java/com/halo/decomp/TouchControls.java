@@ -23,29 +23,19 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
-/** Android multitouch overlay; sends the same keyboard/mouse input as SDL's
- * physical devices. Positions, sizes, opacity and mappings survive relaunches. */
+/** Editable multitouch gamepad with relative swipe aim and absolute menu taps. */
 public final class TouchControls extends View {
     private static final int BUTTON = 0, MOVE = 1, AIM = 2;
-    private static final int FIRE = -1, GRENADE_MOUSE = -2, ZOOM_MOUSE = -4;
+    private static final int PAD = 1000;
     private static final String[] ACTION_NAMES = {
-        "Jump / select", "Melee", "Use / pick up", "Reload", "Switch weapon",
-        "Switch grenade", "Throw grenade", "Fire", "Crouch", "Zoom",
-        "Flashlight", "Pause / back", "Backspace", "Scoreboard", "Up", "Down",
-        "Left", "Right", "Enter", "Delete", "None", "Mouse right", "Mouse middle"
+        "A / select / jump", "B / cancel / melee", "X / use / reload", "Y / switch weapon",
+        "LB / flashlight", "LT / grenade", "RB / switch grenade", "RT / fire",
+        "L3 / crouch", "R3 / zoom", "START / pause / finish name", "BACK / scoreboard",
+        "D-pad up", "D-pad down", "D-pad left", "D-pad right", "None"
     };
     private static final int[] ACTION_KEYS = {
-        KeyEvent.KEYCODE_SPACE, KeyEvent.KEYCODE_F, KeyEvent.KEYCODE_E,
-        KeyEvent.KEYCODE_R, KeyEvent.KEYCODE_1, KeyEvent.KEYCODE_X,
-        KeyEvent.KEYCODE_G, FIRE, KeyEvent.KEYCODE_CTRL_LEFT, KeyEvent.KEYCODE_Z,
-        KeyEvent.KEYCODE_Q, KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_DEL,
-        KeyEvent.KEYCODE_TAB, KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
-        KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
-        KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_FORWARD_DEL, 0,
-        GRENADE_MOUSE, ZOOM_MOUSE
-    };
-    private static final int[] MOVE_KEYS = {
-        KeyEvent.KEYCODE_W, KeyEvent.KEYCODE_S, KeyEvent.KEYCODE_A, KeyEvent.KEYCODE_D
+        PAD, PAD+1, PAD+2, PAD+3, PAD+9, PAD+15, PAD+10, PAD+16,
+        PAD+7, PAD+8, PAD+6, PAD+4, PAD+11, PAD+12, PAD+13, PAD+14, 0
     };
 
     private static final class Control {
@@ -61,8 +51,7 @@ public final class TouchControls extends View {
         Control control;
         int action;
         float downX, downY, lastX, lastY, startX, startY;
-        boolean dragged;
-        boolean[] movement = new boolean[4];
+        boolean dragged, menu;
     }
 
     private final Activity activity;
@@ -72,18 +61,49 @@ public final class TouchControls extends View {
     private final Map<Integer, Integer> held = new HashMap<>();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF editRect = new RectF(), menuRect = new RectF(), optionsRect = new RectF();
-    private boolean editing, menuTouch;
+    private boolean editing, menuTouch = true, menus = true;
+    private int inputMode = -1;
+    private float pointerX, pointerY;
+    private final Runnable modePoll = new Runnable() {
+        @Override public void run() {
+            refreshMode();
+            postDelayed(this, 100);
+        }
+    };
     private int toolbarPointer = -1, toolbarAction = -1, mouseState;
     private float sensitivity = 1.8f;
 
     public TouchControls(Activity activity) {
         super(activity);
         this.activity = activity;
-        prefs = activity.getSharedPreferences("touch_controls_v2", Activity.MODE_PRIVATE);
+        prefs = activity.getSharedPreferences("touch_controls_v3", Activity.MODE_PRIVATE);
         setFocusable(false);
         setClickable(true);
         defaults();
         load();
+    }
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        post(modePoll);
+    }
+    @Override protected void onDetachedFromWindow() {
+        removeCallbacks(modePoll);
+        releaseAll();
+        super.onDetachedFromWindow();
+    }
+    private void refreshMode() {
+        int mode = TouchInput.mode();
+        if (mode == inputMode) return;
+        releaseAll();
+        boolean nextMenus = (mode & 1) != 0;
+        if (nextMenus != menus) {
+            editing = false;
+            menuTouch = nextMenus;
+        }
+        menus = nextMenus;
+        inputMode = mode;
+        invalidate();
     }
 
     private float dp(float value) { return value * getResources().getDisplayMetrics().density; }
@@ -97,36 +117,43 @@ public final class TouchControls extends View {
         controls.clear();
         add("move", "MOVE", MOVE, 0, .14f, .72f, .16f);
         add("aim", "AIM", AIM, 0, .59f, .68f, .18f);
-        add("a", "A", BUTTON, KeyEvent.KEYCODE_SPACE, .87f, .73f, .065f);
-        add("b", "B", BUTTON, KeyEvent.KEYCODE_F, .95f, .62f, .065f);
-        add("x", "X", BUTTON, KeyEvent.KEYCODE_E, .79f, .62f, .065f);
-        add("y", "Y", BUTTON, KeyEvent.KEYCODE_1, .87f, .51f, .065f);
-        add("lb", "LB", BUTTON, KeyEvent.KEYCODE_Q, .08f, .24f, .055f);
-        add("lt", "LT", BUTTON, KeyEvent.KEYCODE_G, .19f, .24f, .055f);
-        add("rb", "RB", BUTTON, KeyEvent.KEYCODE_X, .83f, .24f, .055f);
-        add("rt", "RT", BUTTON, FIRE, .94f, .24f, .07f);
-        add("l3", "L3", BUTTON, KeyEvent.KEYCODE_CTRL_LEFT, .29f, .48f, .05f);
-        add("r3", "R3", BUTTON, KeyEvent.KEYCODE_Z, .73f, .42f, .05f);
-        add("start", "START", BUTTON, KeyEvent.KEYCODE_ESCAPE, .58f, .24f, .055f);
-        add("back", "BACK", BUTTON, KeyEvent.KEYCODE_DEL, .47f, .24f, .055f);
-        add("reload", "RELOAD", BUTTON, KeyEvent.KEYCODE_R, .75f, .89f, .06f);
-        add("score", "SCORE", BUTTON, KeyEvent.KEYCODE_TAB, .36f, .24f, .055f);
-        add("up", "UP", BUTTON, KeyEvent.KEYCODE_DPAD_UP, .36f, .65f, .04f);
-        add("down", "DOWN", BUTTON, KeyEvent.KEYCODE_DPAD_DOWN, .36f, .87f, .04f);
-        add("left", "LEFT", BUTTON, KeyEvent.KEYCODE_DPAD_LEFT, .305f, .76f, .04f);
-        add("right", "RIGHT", BUTTON, KeyEvent.KEYCODE_DPAD_RIGHT, .415f, .76f, .04f);
+        add("a", "A", BUTTON, PAD, .87f, .73f, .065f);
+        add("b", "B", BUTTON, PAD+1, .95f, .62f, .065f);
+        add("x", "X", BUTTON, PAD+2, .79f, .62f, .065f);
+        add("y", "Y", BUTTON, PAD+3, .87f, .51f, .065f);
+        add("lb", "LB", BUTTON, PAD+9, .08f, .24f, .055f);
+        add("lt", "LT", BUTTON, PAD+15, .19f, .24f, .055f);
+        add("rb", "RB", BUTTON, PAD+10, .83f, .24f, .055f);
+        add("rt", "RT", BUTTON, PAD+16, .94f, .24f, .07f);
+        add("l3", "L3", BUTTON, PAD+7, .29f, .48f, .05f);
+        add("r3", "R3", BUTTON, PAD+8, .73f, .42f, .05f);
+        add("start", "START", BUTTON, PAD+6, .58f, .24f, .055f);
+        add("back", "BACK", BUTTON, PAD+4, .47f, .24f, .055f);
+        add("reload", "RELOAD", BUTTON, PAD+2, .75f, .89f, .06f);
+        add("score", "SCORE", BUTTON, PAD+4, .36f, .24f, .055f);
+        add("up", "UP", BUTTON, PAD+11, .36f, .65f, .04f);
+        add("down", "DOWN", BUTTON, PAD+12, .36f, .87f, .04f);
+        add("left", "LEFT", BUTTON, PAD+13, .305f, .76f, .04f);
+        add("right", "RIGHT", BUTTON, PAD+14, .415f, .76f, .04f);
     }
 
     private void load() {
         sensitivity = clamp(prefs.getFloat("sensitivity", 1.8f), .25f, 5f);
         try {
             String saved = prefs.getString("layout", "");
+            boolean legacy = saved.isEmpty();
+            if (legacy) {
+                SharedPreferences old = activity.getSharedPreferences("touch_controls_v2", Activity.MODE_PRIVATE);
+                saved = old.getString("layout", "");
+                sensitivity = clamp(old.getFloat("sensitivity", sensitivity), .25f, 5f);
+            }
             if (saved.isEmpty()) return;
             JSONArray array = new JSONArray(saved);
             ArrayList<Control> loaded = new ArrayList<>();
             for (int i = 0; i < array.length(); i++) {
                 JSONObject o = array.getJSONObject(i);
                 int kind = o.getInt("kind"), action = o.getInt("action");
+                if (legacy) action = migrateAction(action);
                 if (kind < BUTTON || kind > AIM || !validAction(action)) throw new JSONException("Invalid control");
                 Control c = new Control(o.getString("id"), o.getString("label"), kind, action,
                         clamp((float)o.getDouble("x"), 0, 1), clamp((float)o.getDouble("y"), 0, 1),
@@ -136,6 +163,28 @@ public final class TouchControls extends View {
             }
             if (!loaded.isEmpty()) { controls.clear(); controls.addAll(loaded); }
         } catch (JSONException | ClassCastException ignored) { defaults(); }
+    }
+
+    private int migrateAction(int key) {
+        switch (key) {
+            case KeyEvent.KEYCODE_SPACE: case KeyEvent.KEYCODE_ENTER: return PAD;
+            case KeyEvent.KEYCODE_F: return PAD+1;
+            case KeyEvent.KEYCODE_E: case KeyEvent.KEYCODE_R: case KeyEvent.KEYCODE_FORWARD_DEL: return PAD+2;
+            case KeyEvent.KEYCODE_1: return PAD+3;
+            case KeyEvent.KEYCODE_Q: return PAD+9;
+            case KeyEvent.KEYCODE_G: case -2: return PAD+15;
+            case KeyEvent.KEYCODE_X: return PAD+10;
+            case -1: return PAD+16;
+            case KeyEvent.KEYCODE_CTRL_LEFT: return PAD+7;
+            case KeyEvent.KEYCODE_Z: case -4: return PAD+8;
+            case KeyEvent.KEYCODE_ESCAPE: return PAD+6;
+            case KeyEvent.KEYCODE_DEL: case KeyEvent.KEYCODE_TAB: return PAD+4;
+            case KeyEvent.KEYCODE_DPAD_UP: return PAD+11;
+            case KeyEvent.KEYCODE_DPAD_DOWN: return PAD+12;
+            case KeyEvent.KEYCODE_DPAD_LEFT: return PAD+13;
+            case KeyEvent.KEYCODE_DPAD_RIGHT: return PAD+14;
+            default: return 0;
+        }
     }
 
     private boolean validAction(int action) {
@@ -200,8 +249,13 @@ public final class TouchControls extends View {
             }
         }
         toolbar(canvas, editRect, editing ? "DONE" : "EDIT");
-        toolbar(canvas, menuRect, menuTouch ? "GAME" : "MENU");
+        toolbar(canvas, menuRect, menus ? (menuTouch ? "PAD" : "TOUCH") : (menuTouch ? "GAME" : "MENU"));
         toolbar(canvas, optionsRect, "OPTIONS");
+        if (menuTouch && !editing) {
+            paint.setColor(Color.WHITE); paint.setAlpha(230); paint.setTextSize(dp(12));
+            paint.setTextAlign(Paint.Align.CENTER);
+            canvas.drawText((inputMode & 2) != 0 ? "Tap letters, then DONE. PAD offers controller buttons." : "Tap menu items. PAD offers controller buttons.", getWidth()/2f, editRect.bottom + dp(18), paint);
+        }
         if (editing) {
             paint.setColor(Color.WHITE); paint.setAlpha(230); paint.setTextSize(dp(12));
             paint.setTextAlign(Paint.Align.CENTER);
@@ -232,6 +286,8 @@ public final class TouchControls extends View {
     }
 
     @Override public boolean onTouchEvent(MotionEvent e) {
+        refreshMode();
+        if ((inputMode & 4) == 0) return true;
         int action = e.getActionMasked(), index = e.getActionIndex(), id = e.getPointerId(index);
         if (action == MotionEvent.ACTION_CANCEL) { releaseAll(); return true; }
         if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
@@ -245,13 +301,14 @@ public final class TouchControls extends View {
             if (c == null && (!menuTouch || editing)) return true;
             // Each stick has one owner; additional fingers cannot steal it.
             for (Finger other : fingers.values())
-                if (editing || (c != null && c.kind != BUTTON && other.control == c)) return true;
+                if (editing || menuTouch || (c != null && c.kind != BUTTON && other.control == c)) return true;
             Finger f = new Finger(); f.control = c;
             f.downX = f.lastX = x; f.downY = f.lastY = y;
             if (c != null) { f.startX = c.x; f.startY = c.y; f.action = c.action; c.pressed++; }
+            f.menu = menuTouch && !editing;
             fingers.put(id, f);
             if (!editing) {
-                if (menuTouch) { mouseMove(x,y,false); hold(FIRE,true); f.action = FIRE; }
+                if (f.menu) menuMouse(x, y, MotionEvent.ACTION_DOWN);
                 else if (c.kind == BUTTON) hold(f.action,true);
             }
         } else if (action == MotionEvent.ACTION_MOVE) {
@@ -265,14 +322,14 @@ public final class TouchControls extends View {
                         f.control.x = f.startX + (x-f.downX)/getWidth();
                         f.control.y = f.startY + (y-f.downY)/getHeight(); bound(f.control);
                     }
-                } else if (menuTouch) mouseMove(x,y,false);
+                } else if (f.menu) menuMouse(x, y, MotionEvent.ACTION_MOVE);
                 else if (f.control.kind == AIM) mouseMove(dx*sensitivity,dy*sensitivity,true);
                 else if (f.control.kind == MOVE) {
-                    float dead = radius(f.control) * .15f;
-                    boolean[] next = { y-f.downY < -dead, y-f.downY > dead, x-f.downX < -dead, x-f.downX > dead };
-                    for (int k = 0; k < 4; k++) if (next[k] != f.movement[k]) {
-                        hold(MOVE_KEYS[k], next[k]); f.movement[k] = next[k];
-                    }
+                    float r = radius(f.control), mx = (x-f.downX)/r, my = (y-f.downY)/r;
+                    float length = (float)Math.hypot(mx, my);
+                    if (length < .15f) { mx = my = 0; }
+                    else if (length > 1) { mx /= length; my /= length; }
+                    TouchInput.move(mx, my);
                 }
                 f.lastX = x; f.lastY = y;
             }
@@ -282,7 +339,13 @@ public final class TouchControls extends View {
                 if (toolbarAt(e.getX(index),e.getY(index)) == tool) {
                     releaseAll();
                     if (tool == 0) { editing = !editing; if (editing) menuTouch = false; save(); }
-                    if (tool == 1) { editing = false; menuTouch = !menuTouch; }
+                    if (tool == 1) {
+                        editing = false;
+                        menuTouch = !menuTouch;
+                        if (!menus && menuTouch) {
+                            TouchInput.button(6, true); TouchInput.button(6, false);
+                        }
+                    }
                     if (tool == 2) options();
                 }
             } else {
@@ -290,9 +353,9 @@ public final class TouchControls extends View {
                 if (f != null) {
                     if (f.control != null) f.control.pressed = Math.max(0,f.control.pressed-1);
                     if (editing) { save(); if (!f.dragged) editControl(f.control); }
-                    else if (menuTouch || f.control.kind == BUTTON) hold(f.action,false);
-                    else if (f.control.kind == MOVE)
-                        for (int k = 0; k < 4; k++) if (f.movement[k]) hold(MOVE_KEYS[k],false);
+                    else if (f.menu) menuMouse(e.getX(index), e.getY(index), MotionEvent.ACTION_UP);
+                    else if (f.control.kind == BUTTON) hold(f.action,false);
+                    else if (f.control.kind == MOVE) TouchInput.move(0,0);
                 }
             }
         }
@@ -300,7 +363,15 @@ public final class TouchControls extends View {
     }
 
     private void mouseMove(float x, float y, boolean relative) {
-        SDLActivity.onNativeMouse(mouseState, MotionEvent.ACTION_MOVE, x, y, relative);
+        SDLActivity.onNativeMouse(0, MotionEvent.ACTION_MOVE, x, y, relative);
+    }
+    private void menuMouse(float x, float y, int action) {
+        pointerX = x; pointerY = y;
+        if (action == MotionEvent.ACTION_DOWN) mouseState = 1;
+        if (action == MotionEvent.ACTION_UP) mouseState = 0;
+        // Both edges carry the clicked position; never send a relative zero
+        // movement in menu mode or click at the old mouse position.
+        SDLActivity.onNativeMouse(mouseState, action, x, y, false);
     }
     private void hold(int action, boolean down) {
         if (action == 0) return;
@@ -309,19 +380,13 @@ public final class TouchControls extends View {
         int next = down ? count+1 : count-1;
         if (next == 0) held.remove(action); else held.put(action,next);
         if ((count == 0 && down) || (next == 0 && !down)) {
-            if (action < 0) {
-                int mask = -action;
-                mouseState = down ? mouseState | mask : mouseState & ~mask;
-                // Button coordinates are a zero relative delta: no pointer jump.
-                SDLActivity.onNativeMouse(mouseState, down ? MotionEvent.ACTION_DOWN : MotionEvent.ACTION_UP, 0, 0, true);
-            } else if (down) SDLActivity.onNativeKeyDown(action);
-            else SDLActivity.onNativeKeyUp(action);
+            TouchInput.button(action - PAD, down);
         }
     }
     public void releaseAll() {
-        for (int key : new ArrayList<>(held.keySet())) {
-            held.put(key,1); hold(key,false);
-        }
+        TouchInput.reset();
+        held.clear();
+        if (mouseState != 0) menuMouse(pointerX, pointerY, MotionEvent.ACTION_UP);
         fingers.clear(); toolbarPointer = toolbarAction = -1;
         for (Control c : controls) c.pressed = 0;
         invalidate();
@@ -337,7 +402,7 @@ public final class TouchControls extends View {
     }
     private int actionIndex(int key) {
         for (int i = 0; i < ACTION_KEYS.length; i++) if (ACTION_KEYS[i] == key) return i;
-        return 20;
+        return ACTION_KEYS.length - 1;
     }
     private void editControl(Control c) {
         releaseAll();
@@ -373,15 +438,16 @@ public final class TouchControls extends View {
                     .setNegativeButton("Cancel",null).show();
             } else if (which == 1) {
                 editing = true; menuTouch = false;
-                add("custom"+System.nanoTime(),"NEW",BUTTON,KeyEvent.KEYCODE_SPACE,.5f,.5f,.065f);
+                add("custom"+System.nanoTime(),"NEW",BUTTON,PAD,.5f,.5f,.065f);
                 save(); invalidate(); editControl(controls.get(controls.size()-1));
             } else if (which == 2) {
                 new AlertDialog.Builder(activity).setMessage("Restore the default touchscreen layout and button actions?")
                     .setPositiveButton("Reset",(a,b)->{defaults(); for(Control c:controls)bound(c);save();invalidate();})
                     .setNegativeButton("Cancel",null).show();
             } else new AlertDialog.Builder(activity).setTitle("How to play")
-                .setMessage("MOVE: slide for movement. AIM: swipe to look. You can move, aim and hold fire together.\n\nMENU hides the controls and lets you tap the game menus directly. GAME restores the controls. The arrows also navigate menus; A selects and START/BACK go back.\n\nEDIT: drag any control to move it. Tap a control to change its size, opacity and button action, or remove it. DONE saves the layout. OPTIONS lets you add buttons, reset the layout or change aim sensitivity.\n\nThe overlay uses the game's default keyboard bindings. If you change those in the game, update the touch button actions too.")
+                .setMessage("MOVE: slide for analog movement. AIM: swipe to look. You can move, aim and hold fire together.\n\nMenus automatically use direct taps, including the profile keyboard. Tap letters and DONE to save your name. PAD shows controller buttons: arrows move, A selects, B cancels, X deletes and START finishes the name. TOUCH returns to tapping. In gameplay, MENU opens pause.\n\nEDIT: drag any control to move it. Tap a control to change its size, opacity and button action, or remove it. DONE saves the layout. OPTIONS lets you add buttons, reset the layout or change aim sensitivity.\n\nThe buttons are a gamepad, so they cannot type keyboard letters accidentally. Gameplay actions follow your controller profile.")
                 .setPositiveButton("OK",null).show();
         }).show();
     }
 }
+
