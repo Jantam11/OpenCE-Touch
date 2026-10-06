@@ -106,6 +106,16 @@ void SDL_Delay(Uint32 milliseconds)
 
 /* ---------- video */
 
+SDL_JoystickID SDL_GetGamepadID(SDL_Gamepad *gamepad)
+{
+	return (SDL_JoystickID)host_sdl_gamepad_id((unsigned int)gamepad);
+}
+
+bool SDL_IsJoystickVirtual(SDL_JoystickID id)
+{
+	return host_sdl_is_virtual_joystick((unsigned int)id) != 0;
+}
+
 SDL_Window *SDL_CreateWindow(const char *title, int width, int height, SDL_WindowFlags flags)
 {
 	return (SDL_Window *)host_sdl_create_window(title, width, height, (long long)flags);
