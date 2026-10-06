@@ -1,5 +1,12 @@
 # Halo: Combat Evolved for Linux, Windows and Android
 
+> **About this fork:** OpenCE-Touch adds customizable Android touchscreen controls,
+> swipe aiming, and direct touch navigation for menus and the profile keyboard.
+> The fork-specific changes were coded with AI (OpenAI Codex); the original OpenCE
+> project and its contributors provide the underlying game port.
+> Touch builds are on the [`touch-controls`](https://github.com/Jantam11/OpenCE-Touch/tree/touch-controls) branch;
+> the download links below point to upstream OpenCE releases.
+
 [![Join our Discord](https://invidget.switchblade.xyz/9gqcHyr5km)](https://discord.gg/9gqcHyr5km)
 
 This project is a port of the Halo: Combat Evolved decompilation to Linux,
