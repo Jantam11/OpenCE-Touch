@@ -6379,8 +6379,8 @@ static void widget_instance_render_recursive(
 	case _ui_widget_type_text_box:
 #ifdef HALO_ANDROID
         if (ui_porting_context == 2 && !ui_porting_menu.page && widget->parent) {
-            rasterizer_text_set_ui_scale(definition->bounds.x0+offset.x,
-                definition->bounds.y0+offset.y, 112);
+            rasterizer_text_set_scale(1.12f, definition->bounds.x0+offset.x,
+                definition->bounds.y0+offset.y);
             adjusted_definition.bounds.x1 = definition->bounds.x0+
                 (definition->bounds.x1-definition->bounds.x0)*100/112;
             adjusted_definition.bounds.y1 = definition->bounds.y0+
@@ -6394,7 +6394,7 @@ static void widget_instance_render_recursive(
 			offset,
 			widget_instance_text_box_is_focused(widget));
 #ifdef HALO_ANDROID
-        rasterizer_text_set_ui_scale(0, 0, 100);
+        rasterizer_text_set_scale(1.0f, 0.0f, 0.0f);
 #endif
 		break;
 
