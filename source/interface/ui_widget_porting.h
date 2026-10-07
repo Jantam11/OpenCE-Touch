@@ -1,6 +1,8 @@
 /* Android extension of the loaded map UI. Included by ui_widget.c after
    its pointer helpers so the existing widget styles and hit targets are available. */
 #ifdef HALO_ANDROID
+/* The current upstream renderer already provides scale-about-origin. */
+extern void rasterizer_text_set_scale(real scale, real origin_x, real origin_y);
 static struct halo_porting_menu ui_porting_menu;
 static rectangle2d ui_porting_bounds[HALO_PORTING_ROWS];
 static int ui_porting_actions[HALO_PORTING_ROWS];
@@ -214,9 +216,9 @@ static void ui_porting_text(struct widget_instance *style, char const *text, rec
     scaled_clip.x1 = bounds.x0+(clip->x1-bounds.x0)*100/percent;
     scaled_clip.y0 = bounds.y0+(clip->y0-bounds.y0)*100/percent;
     scaled_clip.y1 = bounds.y0+(clip->y1-bounds.y0)*100/percent;
-    rasterizer_text_set_ui_scale(bounds.x0, bounds.y0, percent);
+    rasterizer_text_set_scale((real)percent/100.0f, (real)bounds.x0, (real)bounds.y0);
     widget_instance_render_text_box(&instance, &definition, &scaled_clip, offset, FALSE);
-    rasterizer_text_set_ui_scale(0, 0, 100);
+    rasterizer_text_set_scale(1.0f, 0.0f, 0.0f);
 }
 
 static void ui_porting_background(void)
