@@ -108,4 +108,21 @@ void host_gl_wait_frame(unsigned int slot);
 /* the storage directories the port uses, copied into buffer */
 void host_android_path(int which, char *buffer, unsigned int size);
 
+
+void host_touch_rumble(unsigned int low, unsigned int high);
+int host_touch_camera_read(void);
+float host_touch_field_of_view(void);
+unsigned int host_touch_cheats_read(int *commands);
+void host_touch_cheat_result(int id, int status);
+void host_touch_cheat_sync(int id, int active);
+#include "../../../linux/include/halo_porting_ui.h"
+
+int host_movie_exists(const char *name);
+int host_movie_open(const char *name);
+void host_movie_close(int movie);
+int host_movie_finished(int movie);
+unsigned long host_movie_frame(int movie);
+unsigned long host_movie_frames(int movie);
+unsigned long host_movie_width(int movie);
+unsigned long host_movie_height(int movie);
 #endif

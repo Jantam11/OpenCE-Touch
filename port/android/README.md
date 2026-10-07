@@ -313,3 +313,12 @@ assembly of the port is necessary:
 - The game does not accept touch input. Use a controller or a keyboard.
 - Kernels with 16 KB pages (a developer option of Android 15) do not
   operate. The Xbox memory uses 4 KB pages.
+
+
+## Touch branch mobile features
+
+See the root [README's feature credits](../../README.md#mobile-feature-credits) and movie import instructions. Existing touch layouts stay in `touch_controls_v3`; portable files use the Android document picker. No storage-wide permission is needed. Disabling the overlay retains direct menu taps, so **Porting options** can restore it.
+
+For an Android build with movie support on Linux, set `ANDROID_NDK_HOME` (or `ANDROID_HOME`) and run `python tools/ci_build.py android release`. This compiles the pinned FFmpeg Bink decoder before building the game and APK. When using `ninja android_apk` directly, first run `python tools/build_android_bink.py`; without that optional library the game skips movies. The release build package includes `FFmpeg-LGPL.txt` and `bink-relink.zip` with the exact FFmpeg source, static libraries, player object and relinking instructions. No prebuilt decoder is committed.
+
+Mobile regressions: `python tools/test_android_touch.py` and `python tools/test_android_mobile.py` (JDK with JNI headers and a C compiler). These checks and passing CI do not replace testing gyro, rumble, movies, campaign and multiplayer on a real phone.

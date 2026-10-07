@@ -52,7 +52,7 @@ public class LauncherActivity extends Activity {
             new File(dataRoot, "maps").mkdirs();
         passOnHardwareId();
         passOnInvite(getIntent());
-        if (haveData()) {
+        if (haveData() && !getIntent().getBooleanExtra("import-movies",false)) {
             startGame();
             return;
         }
@@ -133,15 +133,16 @@ public class LauncherActivity extends Activity {
         layout.setBackgroundColor(Color.rgb(12, 16, 20));
 
         TextView title = new TextView(this);
-        title.setText("Halo needs its game data");
+        boolean moviesOnly = getIntent().getBooleanExtra("import-movies", false);
+        title.setText(moviesOnly ? "Import Halo disc movies" : "Halo needs its game data");
         title.setTextColor(Color.WHITE);
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 24);
         title.setGravity(Gravity.CENTER);
         layout.addView(title);
 
         TextView message = new TextView(this);
-        message.setText("Choose an Xbox disc image of Halo: Combat Evolved (an .iso or .xiso file, any "
-            + "version) on this device. Its maps folder is copied into the app's storage (about 1.8 GB), "
+        message.setText(moviesOnly ? "Choose your Halo disc image to import its intro, credits and attract-demo movies. Your maps and profiles stay in place." : "Choose an Xbox disc image of Halo: Combat Evolved (an .iso or .xiso file, any "
+            + "version) on this device. Its maps and bink folders are copied into the app's storage (about 1.8 GB), "
             + "and you can delete the image afterwards.\n\n"
             + "You can also copy a maps folder from a computer:\n"
             + "adb push <folder with maps>/. " + (dataRoot != null ? dataRoot.getAbsolutePath() : "") + "/");
@@ -226,9 +227,11 @@ public class LauncherActivity extends Activity {
             try (FileInputStream in = new FileInputStream(descriptor.getFileDescriptor())) {
                 FileChannel channel = in.getChannel();
 
-                XisoExtractor.extractMaps(channel, dataRoot, (file, done, total) ->
-                    report("Extracting maps/" + file + " (" + (done >> 20) + " of " + (total >> 20) + " MB)",
-                        total > 0 ? (int) (done * 1000 / total) : 0));
+                XisoExtractor.Progress reportProgress = (file, done, total) ->
+                    report("Extracting " + file + " (" + (done >> 20) + " of " + (total >> 20) + " MB)",
+                        total > 0 ? (int) (done * 1000 / total) : 0);
+                if(getIntent().getBooleanExtra("import-movies",false))XisoExtractor.extractMovies(channel,dataRoot,reportProgress);
+                else XisoExtractor.extractMaps(channel,dataRoot,reportProgress);
             }
             handler.post(() -> {
                 if (haveData()) {

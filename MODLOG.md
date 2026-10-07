@@ -22,3 +22,12 @@ Prepared the upstream merge locally in two ordinary merge commits, without confl
 Added production-function regression coverage for touch pad priority and player 1 ownership across split-screen/profile transitions, preserving physical-controller behaviour. All local touch tests pass after both merges. Android CI now runs them before compilation. Local broader port checks lack pytest/clang; the repository's CI provides those dependencies and will run its build/test jobs. No phone/emulator is connected for a new gameplay test.
 
 Prepared version 0.3.0-touch (Android version code 3), short changelog and release instructions. Release APK/build validation pending CI; packaging must include dependency licenses. The fork has no persistent signing secret, so a new runner key can prevent installation over older builds.
+
+
+## 2026-10-07 mobile fork integration / 0.4.0-touch
+
+User approved the recommendations from theLlamaNet/halo-ce-android and JoshRob297/halo-ce-touch, especially video, and authorized commits/push/release with credits. Baseline touch-controls 93ec01b (0.3.0-touch). Feature references: Llama 2f469d2; Josh main 8a6fe36; clean Bink branch 79847b0. Selected/adapted patches rather than merging either older full fork: retain upstream network protocol 22, desktop builds, latest co-op, SDL virtual input, editable layouts and direct profile-keyboard taps.
+
+Added mobile settings/input/cheats/camera bridge beside existing host_touch.c; layouts import both forks' Properties format; movie-only disc import leaves maps/profiles intact. Compile FFmpeg 8.1.3 Bink decoder from checksum-pinned official source; package LGPL notice/source/relink materials. Fixed held-input handoff to movie playback, playback pause/error recovery, case-sensitive filenames and language lookup, repeated asset registration and decoder clock waiting. Server rotation keeps co-op setup and requires normal readiness/precache conditions before forced start. MQTT relay retains current MQTT5 broker/listing/backpressure behavior.
+
+Local actual-production regressions pass for fast taps/cancel/controller ports/menu coordinates/profile keyboard, portable layouts/malformed files, gyro rotation/time gaps/noise, startup init.txt preservation, synthetic disc import, native movie progress/skip/timeout/reopen/languages and mobile JNI bridge. No phone/emulator or game assets connected. Full debug/release Linux/Windows/Android CI and final release packaging still pending.

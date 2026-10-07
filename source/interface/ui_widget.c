@@ -2124,7 +2124,8 @@ boolean main_menu_screen_is_active(
 {
 	if (we_are_at_the_main_menu == TRUE &&
 		widget_globals.active_widgets[0] &&
-		strcmp(widget_globals.active_widgets[0]->name, "the_main_menu") == 0)
+		(strcmp(widget_globals.active_widgets[0]->name, "the_main_menu") == 0 ||
+		strcmp(widget_globals.active_widgets[0]->name, "main_menu") == 0))
 	{
 		return TRUE;
 	}
@@ -5598,7 +5599,7 @@ static void widget_instance_render_spinner_list(
 
 The menus were made for a controller: the d-pad moves the focus through a
 screen's items and A activates the focused one. With the mouse
-(port/linux/include/halo_ui_pointer.h) the item under the pointer takes the
+(port/shared/include/halo_ui_pointer.h) the item under the pointer takes the
 focus, a left click presses A on it (on a spinner list, left or right by the
 half clicked), a right click presses B and the wheel the d-pad. The items and
 where they are drawn are noted while the menus draw (ui_mouse_note_target),
@@ -5991,6 +5992,11 @@ static boolean ui_mouse_menus_active(
 	return virtual_keyboard_active() || ui_mouse_menu() != NULL || game_engine_showing_postgame();
 }
 
+#ifdef HALO_ANDROID
+#include "../../port/android/guest/runtime/guest_host.h"
+#endif
+#include "ui_widget_porting.h"
+
 /* the pointer's motion, clicks and wheel since the last frame, as the first
 player's controller events */
 /* port: a row of a list to choose from (the PC version's menus' lists of
@@ -6025,6 +6031,9 @@ static void ui_widgets_process_mouse(
 	struct halo_ui_pointer pointer;
 	struct ui_mouse_target *target;
 	short controller_index = 0;
+	#ifdef HALO_ANDROID
+	ui_porting_prepare();
+#endif
 	int pointer_active = halo_ui_pointer_update(ui_mouse_menus_active() || virtual_keyboard_active(), &pointer);
 	if (pointer_active && virtual_keyboard_active())
 	{
@@ -6039,6 +6048,7 @@ static void ui_widgets_process_mouse(
 
 	if (!pointer_active ||
 		virtual_keyboard_active())
+
 	{
 		ui_mouse_press_count = 0;
 		ui_mouse_hover_pending = FALSE;
@@ -6046,6 +6056,26 @@ static void ui_widgets_process_mouse(
 	}
 	else
 	{
+#ifdef HALO_ANDROID
+        if (ui_porting_pointer(&pointer)) {
+            ui_mouse_press_count = 0;
+            ui_mouse_hover_pending = ui_mouse_click_pending = FALSE;
+            ui_mouse_target_count = 0;
+            return;
+        }
+        /* Screen-edge taps move the focused menu list without activating it.
+           Use the list's own axes for both mission carousels and option lists. */
+        if (pointer.left_clicks && pointer.side_step &&
+            !ui_mouse_target_at(pointer.click_x, pointer.click_y)) {
+            struct widget_instance *list = ui_mouse_wheel_widget(ui_mouse_menu());
+            if (list) {
+                short back, forward;
+                ui_mouse_list_directions(list, &back, &forward);
+                ui_mouse_press(pointer.side_step < 0 ? back : forward);
+                pointer.left_clicks = 0;
+            }
+        }
+#endif
 		if (pointer.moved)
 		{
 			ui_mouse_hover_pending = TRUE;
@@ -6178,6 +6208,12 @@ static void widget_instance_render_recursive(
 	struct bitmap_data *custom_edition_picture;
 	short frame_index;
 
+#ifdef HALO_ANDROID
+    struct ui_widget_definition adjusted_definition;
+    point2d unscaled_offset;
+#endif
+
+
 	if (!use_nifty_plasma_fx &&
 		TEST_FLAG(definition->flags, _widget_always_render_with_nifty_fx_bit))
 	{
@@ -6185,6 +6221,10 @@ static void widget_instance_render_recursive(
 	}
 	offset.x += widget->horizontal_offset;
 	offset.y += widget->vertical_offset;
+#ifdef HALO_ANDROID
+    unscaled_offset = offset;
+    if (!ui_porting_adjust_widget(widget, &definition, &adjusted_definition, &offset)) return;
+#endif
 	for (input_index = 0;
 		input_index < definition->game_data_inputs.count;
 		input_index++)
@@ -6198,13 +6238,23 @@ static void widget_instance_render_recursive(
 	}
 	if (!widget->visible)
 		return;
+#ifdef HALO_ANDROID
+    if (ui_porting_context && (ui_porting_menu.page || ui_porting_menu.editing) &&
+        ui_mouse_widget_is_item(widget)) return;
+#endif
 	ui_mouse_note_target(widget, definition, offset);
+
+#ifdef HALO_ANDROID
+    /* Keep the original list position/focus target, replace its Quit artwork. */
+    if (ui_porting_is_quit(widget)) return;
+#endif
 	/* port: a Custom Edition map's picture, drawn over the whole widget, or
 	the unknown level's frame for a map without one
 	(port/linux/game/custom_edition_maps.c) */
 	frame_index = widget->animation.current_frame_index;
 	custom_edition_picture = custom_edition_maps_picture(definition->background_bitmap.index, &frame_index);
 	bitmap = custom_edition_picture ? custom_edition_picture : bitmap_group_get_bitmap_from_sequence(
+
 		definition->background_bitmap.index,
 		0,
 		frame_index);
@@ -6327,12 +6377,25 @@ static void widget_instance_render_recursive(
 	switch (widget->type)
 	{
 	case _ui_widget_type_text_box:
+#ifdef HALO_ANDROID
+        if (ui_porting_context == 2 && !ui_porting_menu.page && widget->parent) {
+            rasterizer_text_set_ui_scale(definition->bounds.x0+offset.x,
+                definition->bounds.y0+offset.y, 112);
+            adjusted_definition.bounds.x1 = definition->bounds.x0+
+                (definition->bounds.x1-definition->bounds.x0)*100/112;
+            adjusted_definition.bounds.y1 = definition->bounds.y0+
+                (definition->bounds.y1-definition->bounds.y0)*100/112;
+        }
+#endif
 		widget_instance_render_text_box(
 			widget,
 			definition,
 			clip_rect,
 			offset,
 			widget_instance_text_box_is_focused(widget));
+#ifdef HALO_ANDROID
+        rasterizer_text_set_ui_scale(0, 0, 100);
+#endif
 		break;
 
 	case _ui_widget_type_spinner_list:
@@ -6365,6 +6428,9 @@ static void widget_instance_render_recursive(
 	}
 	if (render_children)
 	{
+#ifdef HALO_ANDROID
+        offset = unscaled_offset;
+#endif
 		for (child = widget->child; child; child = child->next)
 		{
 			focus = child == widget->focused_child;
@@ -6526,6 +6592,9 @@ void render_ui_widgets(
 					TRUE,
 					FALSE);
 				ui_mouse_noting_targets = FALSE;
+#ifdef HALO_ANDROID
+                ui_porting_render(widget, &bounds);
+#endif
 				if (widget_globals.debug_show_path)
 				{
 					real_argb_color color = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -6834,7 +6903,39 @@ static void widget_instance_process_one_event_recursive(
 {
 	boolean event_handled = FALSE;
 	boolean widget_deleted = FALSE;
+
+#ifdef HALO_ANDROID
+    if (ui_porting_context == 1 && event->type == _event_type_button &&
+        event->data.button.value == 1) {
+        if (ui_porting_is_quit(widget) &&
+            (event->data.button.index == _gamepad_analog_button_a ||
+             event->data.button.index == _gamepad_binary_button_start)) {
+            host_porting_action(ui_porting_menu.revision, 1, 0);
+            *return_widget_deleted = FALSE;
+            return;
+        }
+        /* Android Back at the root must not open the obsolete Quit dialog. */
+        if (!widget->parent &&
+            (event->data.button.index == _widget_event_b_button ||
+             event->data.button.index == _widget_event_back_button)) {
+            char const *name = tag_get_name(widget->definition_tag_index);
+            if (name && (!strcmp(name, "pc\\main_menu\\main_menu") ||
+                !strcmp(name, "ui\\shell\\main_menu\\main_menu"))) {
+                *return_widget_deleted = FALSE;
+                return;
+            }
+        }
+    }
+    if (!widget->parent && ui_porting_context && ui_porting_menu.page) {
+        *return_widget_deleted = FALSE;
+        if (event->type == _event_type_button && event->data.button.value == 1 &&
+            event->data.button.index == _widget_event_b_button)
+            host_porting_action(ui_porting_menu.revision, 90, 0);
+        return;
+    }
+#endif
 	boolean event_for_this_widget = widget_takes_events_of_controller(widget, event->controller_index);
+
 	long audio_feedback = _ui_audio_feedback_none;
 
 	match_assert(
@@ -7532,7 +7633,7 @@ static boolean ui_check_for_pause_game(
 		}
 	}
 	/* This runs once a frame, several frames per tick on the native builds
-	(port/linux/game/render_interpolation.c): count the lock down in 30 Hz
+	(port/shared/game/render_interpolation.c): count the lock down in 30 Hz
 	ticks of real time, not in frames. */
 	{
 		static real leftover_ticks = 0.f;

@@ -24,18 +24,18 @@ import java.util.HashMap;
 import java.util.Map;
 
 /** Editable multitouch gamepad with relative swipe aim and absolute menu taps. */
-public final class TouchControls extends View {
+public final class TouchControls extends View implements android.hardware.SensorEventListener {
     private static final int BUTTON = 0, MOVE = 1, AIM = 2;
-    private static final int PAD = 1000;
+    private static final int PAD = 1000, CAMERA = 2000;
     private static final String[] ACTION_NAMES = {
         "A / select / jump", "B / cancel / melee", "X / use / reload", "Y / switch weapon",
         "LB / flashlight", "LT / grenade", "RB / switch grenade", "RT / fire",
         "L3 / crouch", "R3 / zoom", "START / pause / finish name", "BACK / scoreboard",
-        "D-pad up", "D-pad down", "D-pad left", "D-pad right", "None"
+        "D-pad up", "D-pad down", "D-pad left", "D-pad right", "Camera mode", "None"
     };
     private static final int[] ACTION_KEYS = {
         PAD, PAD+1, PAD+2, PAD+3, PAD+9, PAD+15, PAD+10, PAD+16,
-        PAD+7, PAD+8, PAD+6, PAD+4, PAD+11, PAD+12, PAD+13, PAD+14, 0
+        PAD+7, PAD+8, PAD+6, PAD+4, PAD+11, PAD+12, PAD+13, PAD+14, CAMERA, 0
     };
 
     private static final class Control {
@@ -67,6 +67,7 @@ public final class TouchControls extends View {
     private final Runnable modePoll = new Runnable() {
         @Override public void run() {
             refreshMode();
+            pollFeatures();
             postDelayed(this, 100);
         }
     };
@@ -81,6 +82,7 @@ public final class TouchControls extends View {
         setClickable(true);
         defaults();
         load();
+        loadFeatures();
     }
 
     @Override protected void onAttachedToWindow() {
@@ -89,6 +91,7 @@ public final class TouchControls extends View {
     }
     @Override protected void onDetachedFromWindow() {
         removeCallbacks(modePoll);
+        stopDeviceInput();
         releaseAll();
         super.onDetachedFromWindow();
     }
@@ -103,6 +106,7 @@ public final class TouchControls extends View {
         }
         menus = nextMenus;
         inputMode = mode;
+        updateSensors();
         invalidate();
     }
 
@@ -221,6 +225,12 @@ public final class TouchControls extends View {
     }
 
     @Override protected void onDraw(Canvas canvas) {
+        if (movieActive) return;
+        if (settings.fps && !menus && !editing && !settings.overlayDisabled) {
+            paint.setColor(Color.WHITE); paint.setAlpha(255); paint.setTextSize(dp(14));
+            paint.setTextAlign(Paint.Align.LEFT); canvas.drawText("FPS: " + currentFps, dp(12), dp(70), paint);
+        }
+        if (settings.overlayDisabled && !editing) return;
         if (!menuTouch || editing) {
             for (Control c : controls) {
                 float x = c.x * getWidth(), y = c.y * getHeight(), r = radius(c);
@@ -245,7 +255,11 @@ public final class TouchControls extends View {
                 paint.setStyle(Paint.Style.FILL); paint.setColor(Color.WHITE); paint.setAlpha(235);
                 paint.setTextAlign(Paint.Align.CENTER);
                 paint.setTextSize(Math.min(dp(13), r * .35f));
-                canvas.drawText(c.label, x, y - (paint.ascent() + paint.descent()) / 2, paint);
+                if (settings.icons && c.kind == BUTTON) {
+                    int icon = iconFor(c.action);
+                    if (icon >= 0) TouchIcons.draw(canvas, paint, icon, x, y, r*.68f, c.pressed > 0);
+                    else canvas.drawText(c.label, x, y - (paint.ascent() + paint.descent()) / 2, paint);
+                } else canvas.drawText(c.label, x, y - (paint.ascent() + paint.descent()) / 2, paint);
             }
         }
         toolbar(canvas, editRect, editing ? "DONE" : "EDIT");
@@ -287,7 +301,12 @@ public final class TouchControls extends View {
 
     @Override public boolean onTouchEvent(MotionEvent e) {
         refreshMode();
-        if ((inputMode & 4) == 0) return true;
+        if ((inputMode & 4) == 0 || movieActive) return true;
+        if (settings.overlayDisabled && !editing) {
+            int a = e.getActionMasked();
+            if (menus) menuMouse(e.getX(), e.getY(), a);
+            return true;
+        }
         int action = e.getActionMasked(), index = e.getActionIndex(), id = e.getPointerId(index);
         if (action == MotionEvent.ACTION_CANCEL) { releaseAll(); return true; }
         if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
@@ -323,7 +342,8 @@ public final class TouchControls extends View {
                         f.control.y = f.startY + (y-f.downY)/getHeight(); bound(f.control);
                     }
                 } else if (f.menu) menuMouse(x, y, MotionEvent.ACTION_MOVE);
-                else if (f.control.kind == AIM) mouseMove(dx*sensitivity,dy*sensitivity,true);
+                else if (f.control.kind == AIM || f.control.kind == BUTTON && f.action == PAD+16)
+                    mouseMove(dx*sensitivity,dy*sensitivity,true);
                 else if (f.control.kind == MOVE) {
                     float r = radius(f.control), mx = (x-f.downX)/r, my = (y-f.downY)/r;
                     float length = (float)Math.hypot(mx, my);
@@ -374,6 +394,7 @@ public final class TouchControls extends View {
         SDLActivity.onNativeMouse(mouseState, action, x, y, false);
     }
     private void hold(int action, boolean down) {
+        if (action == CAMERA) { if (down && !menus) nativeCameraMode(); return; }
         if (action == 0) return;
         int count = held.containsKey(action) ? held.get(action) : 0;
         if (!down && count == 0) return;
@@ -385,6 +406,8 @@ public final class TouchControls extends View {
     }
     public void releaseAll() {
         TouchInput.reset();
+        gyroAim.reset();
+        nativeLookReset();
         held.clear();
         if (mouseState != 0) menuMouse(pointerX, pointerY, MotionEvent.ACTION_UP);
         fingers.clear(); toolbarPointer = toolbarAction = -1;
@@ -426,9 +449,9 @@ public final class TouchControls extends View {
             }).setNegativeButton("Cancel",null)
             .setNeutralButton("Remove",(d,w)->{controls.remove(c); save(); invalidate();}).show();
     }
-    private void options() {
+    public void options() {
         releaseAll();
-        String[] choices = {"Aim sensitivity", "Add button", "Reset layout", "Help"};
+        String[] choices = {"Aim sensitivity", "Add button", "Reset layout", "Help", "General settings", "Export layout", "Import layout", "Single-player cheats", "Import disc movies", "Camera mode"};
         new AlertDialog.Builder(activity).setTitle("Touch controls").setItems(choices,(d,which)->{
             if (which == 0) {
                 LinearLayout layout = dialogLayout();
@@ -437,6 +460,8 @@ public final class TouchControls extends View {
                     .setPositiveButton("Save",(a,b)->{sensitivity=(value.getProgress()+25)/100f;save();})
                     .setNegativeButton("Cancel",null).show();
             } else if (which == 1) {
+                if (controls.size() >= TouchConfiguration.LIMIT) return;
+                settings.overlayDisabled = false; saveFeatures();
                 editing = true; menuTouch = false;
                 add("custom"+System.nanoTime(),"NEW",BUTTON,PAD,.5f,.5f,.065f);
                 save(); invalidate(); editControl(controls.get(controls.size()-1));
@@ -444,10 +469,152 @@ public final class TouchControls extends View {
                 new AlertDialog.Builder(activity).setMessage("Restore the default touchscreen layout and button actions?")
                     .setPositiveButton("Reset",(a,b)->{defaults(); for(Control c:controls)bound(c);save();invalidate();})
                     .setNegativeButton("Cancel",null).show();
-            } else new AlertDialog.Builder(activity).setTitle("How to play")
+            } else if (which == 3) new AlertDialog.Builder(activity).setTitle("How to play")
                 .setMessage("MOVE: slide for analog movement. AIM: swipe to look. You can move, aim and hold fire together.\n\nMenus automatically use direct taps, including the profile keyboard. Tap letters and DONE to save your name. PAD shows controller buttons: arrows move, A selects, B cancels, X deletes and START finishes the name. TOUCH returns to tapping. In gameplay, MENU opens pause.\n\nEDIT: drag any control to move it. Tap a control to change its size, opacity and button action, or remove it. DONE saves the layout. OPTIONS lets you add buttons, reset the layout or change aim sensitivity.\n\nThe buttons are a gamepad, so they cannot type keyboard letters accidentally. Gameplay actions follow your controller profile.")
                 .setPositiveButton("OK",null).show();
+            else if (which == 4) generalSettings();
+            else if (which == 5 || which == 6) ((HaloActivity)activity).chooseLayoutFile(which == 5, exportLayout());
+            else if (which == 7) cheatSettings();
+            else if (which == 8) {
+                android.content.Intent intent = new android.content.Intent(activity, LauncherActivity.class);
+                intent.putExtra("import-movies", true); activity.startActivity(intent);
+            } else if (which == 9) nativeCameraMode();
         }).show();
+    }
+    // Mobile features adapted from theLlamaNet / FulGer. SDL virtual input stays in TouchInput.
+    private final TouchConfiguration settings = new TouchConfiguration();
+    private final GyroscopeAim gyroAim = new GyroscopeAim();
+    private final float[] gyroDelta = new float[2];
+    private android.hardware.SensorManager sensors;
+    private android.hardware.Sensor gyroscope;
+    private android.os.Vibrator vibrator;
+    private boolean deviceInputActive, gyroRegistered, movieActive;
+    private int currentFps, menuContext;
+    private StartupCheats startupCheats;
+    private static native int nativeRumble();
+    private static native void nativeLookReset();
+    private static native void nativeCameraMode();
+    private static native boolean nativeCheatRequest(int id, boolean enabled);
+    private static native int nativeCheatStatus(int id);
+    private static native void nativeFieldOfView(float degrees);
+    private static native int[] nativeMenuPoll();
+    private static native void nativeMenuPublish(int revision, int page, boolean editing,
+        String title, String[] labels, int[] actions, int[] values);
+
+    private void loadFeatures() {
+        settings.gyro = prefs.getBoolean("gyro", false); settings.rumble = prefs.getBoolean("rumble", true);
+        settings.fps = prefs.getBoolean("fps", false); settings.icons = prefs.getBoolean("icons", true);
+        settings.overlayDisabled = prefs.getBoolean("overlay-disabled", false);
+        settings.gyroSensitivity = prefs.getFloat("gyro-sensitivity", 1f);
+        if (!Float.isFinite(settings.gyroSensitivity) || settings.gyroSensitivity < .25f || settings.gyroSensitivity > 4f) settings.gyroSensitivity = 1f;
+        settings.fov = prefs.getFloat("fov", 70f);
+        if (!Float.isFinite(settings.fov) || settings.fov < 55f || settings.fov > 90f) settings.fov = 70f;
+        nativeFieldOfView(settings.fov);
+        sensors = (android.hardware.SensorManager)activity.getSystemService(android.content.Context.SENSOR_SERVICE);
+        gyroscope = sensors == null ? null : sensors.getDefaultSensor(android.hardware.Sensor.TYPE_GYROSCOPE);
+        vibrator = (android.os.Vibrator)activity.getSystemService(android.content.Context.VIBRATOR_SERVICE);
+        java.io.File root = activity.getExternalFilesDir(null);
+        if (root != null) try { startupCheats = new StartupCheats(new java.io.File(root,"init.txt").toPath()); }
+        catch (java.io.IOException e) { toast("Cannot read startup cheats: " + e.getMessage()); }
+        // Native Halo menus expose Porting options; Android dialogs provide the settings pages.
+        nativeMenuPublish(1, 0, false, "Porting options", new String[0], new int[0], new int[0]);
+    }
+    private void saveFeatures() {
+        prefs.edit().putBoolean("gyro", settings.gyro).putBoolean("rumble", settings.rumble)
+            .putBoolean("fps",settings.fps).putBoolean("icons",settings.icons)
+            .putBoolean("overlay-disabled",settings.overlayDisabled)
+            .putFloat("gyro-sensitivity",settings.gyroSensitivity).putFloat("fov",settings.fov).apply();
+        nativeFieldOfView(settings.fov); updateSensors(); invalidate();
+    }
+    private void toast(String s) { android.widget.Toast.makeText(activity,s,android.widget.Toast.LENGTH_LONG).show(); }
+    public void startDeviceInput() { deviceInputActive = true; updateSensors(); }
+    public void stopDeviceInput() {
+        deviceInputActive = false; updateSensors();
+        if (vibrator != null) try { vibrator.cancel(); } catch (RuntimeException ignored) {}
+        releaseAll();
+    }
+    public void suspendForMovie(boolean suspended) {
+        movieActive = suspended; releaseAll(); updateSensors();
+        if (vibrator != null) try { vibrator.cancel(); } catch (RuntimeException ignored) {}
+    }
+    private void updateSensors() {
+        boolean needed = deviceInputActive && !menus && !editing && !movieActive && !settings.overlayDisabled && settings.gyro && gyroscope != null;
+        if (needed && !gyroRegistered) { gyroAim.reset(); gyroRegistered = sensors.registerListener(this,gyroscope,android.hardware.SensorManager.SENSOR_DELAY_GAME); }
+        else if (!needed && gyroRegistered) { sensors.unregisterListener(this); gyroRegistered = false; gyroAim.reset(); }
+    }
+    @Override public void onAccuracyChanged(android.hardware.Sensor sensor, int accuracy) {}
+    @Override public void onSensorChanged(android.hardware.SensorEvent event) {
+        if (!deviceInputActive || !settings.gyro || menus || editing || movieActive || settings.overlayDisabled) { gyroAim.reset(); return; }
+        int rotation = activity.getWindowManager().getDefaultDisplay().getRotation();
+        if (gyroAim.sample(event.timestamp,event.values[0],event.values[1],rotation,gyroDelta))
+            mouseMove(-gyroDelta[0]/.0022f*settings.gyroSensitivity,-gyroDelta[1]/.0022f*settings.gyroSensitivity,true);
+    }
+    private void pollFeatures() {
+        updateSensors();
+        if (!deviceInputActive || movieActive) return;
+        int[] state = nativeMenuPoll();
+        if (state != null) { currentFps = state[5]; menuContext = state[1]; if (state[2] == 1) options(); }
+        if (vibrator != null && vibrator.hasVibrator()) try {
+            int amplitude = settings.rumble && !menus && !editing && !settings.overlayDisabled ? nativeRumble() : 0;
+            if (amplitude > 0) vibrator.vibrate(android.os.VibrationEffect.createOneShot(110,
+                vibrator.hasAmplitudeControl() ? amplitude : android.os.VibrationEffect.DEFAULT_AMPLITUDE));
+            else vibrator.cancel();
+        } catch (RuntimeException ignored) {}
+        if (settings.fps) invalidate();
+    }
+    private static int iconFor(int action) {
+        if (action == CAMERA) return 18;
+        int[] map = {0,1,2,3,11,-1,10,6,7,8,9,12,13,14,15,5,4};
+        int i = action - PAD; return i >= 0 && i < map.length ? map[i] : -1;
+    }
+    private void generalSettings() {
+        String[] rows = {"Gyroscope: " + (gyroscope == null ? "unavailable" : settings.gyro ? "ON" : "OFF"),
+            "Gyroscope sensitivity", "Rumble: " + (vibrator == null || !vibrator.hasVibrator() ? "unavailable" : settings.rumble ? "ON" : "OFF"),
+            "FPS counter: " + (settings.fps ? "ON" : "OFF"), "Field of view: " + Math.round(settings.fov),
+            "Halo icons: " + (settings.icons ? "ON" : "OFF"), "Disable overlay: " + (settings.overlayDisabled ? "ON" : "OFF")};
+        new AlertDialog.Builder(activity).setTitle("General settings").setItems(rows,(d,i)->{
+            releaseAll();
+            if (i == 0 && gyroscope != null) settings.gyro = !settings.gyro;
+            else if (i == 1 || i == 4) {
+                boolean fov = i == 4; LinearLayout layout = dialogLayout();
+                SeekBar value = slider(layout,fov ? "Field of view (55–90 degrees)" : "Gyroscope sensitivity (0.25–4)",
+                    fov ? 35 : 375, Math.round(fov ? settings.fov-55 : (settings.gyroSensitivity-.25f)*100));
+                new AlertDialog.Builder(activity).setTitle(fov ? "Field of view" : "Gyroscope sensitivity").setView(layout)
+                    .setPositiveButton("Save",(a,b)->{ if (fov) settings.fov=55+value.getProgress(); else settings.gyroSensitivity=.25f+value.getProgress()/100f; saveFeatures(); })
+                    .setNegativeButton("Cancel",null).show();return;
+            } else if (i == 2) settings.rumble = !settings.rumble;
+            else if (i == 3) settings.fps = !settings.fps;
+            else if (i == 5) settings.icons = !settings.icons;
+            else if (i == 6) settings.overlayDisabled = !settings.overlayDisabled;
+            saveFeatures(); generalSettings();
+        }).setNegativeButton("Close",null).show();
+    }
+    private static final String[] CHEATS = {"Invincibility","Jetpack","Infinite ammo","Bump possession","Super jump","Reflexive damage","Medusa","Omnipotent","Controller cheats","Bottomless clip","Active camouflage (player)","Active camouflage","All powerups","All vehicles","All weapons","Teleport to camera"};
+    private void cheatSettings() {
+        String[] rows = CHEATS.clone();
+        boolean startup = menuContext == 1;
+        for (int i=0;i<rows.length;i++) if (i<10 || startup) rows[i] += startup ? startupCheats != null && startupCheats.enabled(i) ? ": ON" : ": OFF" : nativeCheatStatus(i)==1 ? ": ON" : ": OFF";
+        new AlertDialog.Builder(activity).setTitle(startup ? "Startup cheats (single-player)" : "Single-player cheats").setItems(rows,(d,i)->{
+            if (startup) { if (startupCheats != null) try { startupCheats.toggle(i); } catch (java.io.IOException e) { toast("Cannot save cheats: "+e.getMessage()); } }
+            else if (!nativeCheatRequest(i,i>=10 || nativeCheatStatus(i)!=1)) toast("Cheat request is busy");
+            cheatSettings();
+        }).setNegativeButton("Close",null).show();
+    }
+    public String exportLayout() {
+        TouchConfiguration c = settings; c.buttons.clear(); c.sensitivity = sensitivity;
+        for (Control control: controls) {
+            TouchConfiguration.Button b=new TouchConfiguration.Button(); b.id=control.id;b.label=control.label;b.kind=control.kind;b.action=control.action;
+            b.x=control.x;b.y=control.y;b.radius=control.radius;b.opacity=control.opacity;c.buttons.add(b);
+        }
+        return c.encode();
+    }
+    public void importLayout(String text) {
+        TouchConfiguration c=TouchConfiguration.decode(text); ArrayList<Control> next=new ArrayList<>();
+        for (TouchConfiguration.Button b:c.buttons) { Control control=new Control(b.id,b.label,b.kind,b.action,b.x,b.y,b.radius);control.opacity=b.opacity;next.add(control); }
+        releaseAll(); controls.clear(); controls.addAll(next); sensitivity=c.sensitivity;
+        settings.gyro=c.gyro;settings.gyroSensitivity=c.gyroSensitivity;settings.rumble=c.rumble;settings.fps=c.fps;settings.fov=c.fov;
+        settings.icons=c.icons;settings.overlayDisabled=c.overlayDisabled;
+        for(Control control:controls)bound(control); save();saveFeatures();
     }
 }
 

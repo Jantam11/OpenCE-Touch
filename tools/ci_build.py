@@ -47,6 +47,8 @@ def main() -> int:
     parser.add_argument("config", choices=["debug", "release"])
     args = parser.parse_args()
 
+    if args.platform == "android":
+        run([sys.executable, "tools/build_android_bink.py"])
     configure = [sys.executable, "configure.py", "--portable"]
     if args.config == "release":
         configure.append("--release")
@@ -111,6 +113,9 @@ def main() -> int:
     # the menus' XML parser (port/third_party/expat), in every build, whose
     # MIT license asks copies to carry its notice
     shutil.copy2(ROOT / "port/third_party/expat/COPYING", dist / "expat-COPYING.txt")
+    if args.platform == "android":
+        shutil.copy2(ROOT / "build/android/FFmpeg-LGPL.txt", dist / "FFmpeg-LGPL.txt")
+        shutil.copy2(ROOT / "build/android/bink-relink.zip", dist / "bink-relink.zip")
     # internet play's MQTT brokers, a file beside the game (network.brokers_file;
     # Android's APK has its own copy)
     if args.platform != "android":

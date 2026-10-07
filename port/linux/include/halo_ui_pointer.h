@@ -21,6 +21,9 @@ struct halo_ui_pointer
 	unsigned char right_clicks;
 	/* whole wheel notches, away from the user positive */
 	signed char wheel_steps;
+	short scroll_pixels;
+	unsigned char scroll_drag;
+	signed char side_step;
 };
 
 /* frees the mouse for the menus while menus_active, and captures it again

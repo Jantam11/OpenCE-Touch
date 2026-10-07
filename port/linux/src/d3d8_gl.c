@@ -25,6 +25,9 @@ Conventions carried over from the Xbox:
 #include "sdl_platform.h"
 #include "halo_ui_pointer.h"
 #include "port_config.h"
+#ifdef HALO_ANDROID
+#include "../../android/guest/runtime/guest_host.h"
+#endif
 
 #include <math.h>
 #include <stdio.h>
@@ -4640,6 +4643,9 @@ void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destinat
 	(void)destination_rectangle;
 	(void)unused;
 	(void)unused2;
+#ifdef HALO_ANDROID
+	host_touch_frame();
+#endif
 	if (screenshot_every < 0)
 		screenshot_every = config_integer("debug.screenshot_every");
 

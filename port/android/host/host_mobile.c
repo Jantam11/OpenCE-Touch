@@ -1,0 +1,279 @@
+/* UI thread writes one snapshot; the guest reads it on the input thread. */
+#include <jni.h>
+#include <pthread.h>
+#include <stdint.h>
+#include <string.h>
+#include <time.h>
+#include "../../linux/include/halo_porting_ui.h"
+
+static pthread_mutex_t touch_lock = PTHREAD_MUTEX_INITIALIZER;
+static int32_t touch_state[7]; /* SDL axes followed by SDL button bits */
+static float look_delta[2];
+static int camera_pending;
+static struct timespec look_time;
+static uint32_t cheat_pending, cheat_busy;
+static int32_t cheat_commands[16], cheat_status[16];
+static int rumble_amplitude;
+static struct timespec rumble_time;
+static int ui_menus = 1, ui_context, ui_action, ui_value, ui_revision;
+static float ui_point[6]; /* normalized x/y, click, back, scroll, scrollbar */
+static struct halo_porting_menu porting_menu;
+static int frame_count, frame_fps;
+static struct timespec frame_time;
+static float field_of_view = 70.0f;
+
+JNIEXPORT void JNICALL Java_com_halo_decomp_TouchControls_nativeFieldOfView(
+    JNIEnv *env, jclass cls, jfloat degrees)
+{
+    (void)env; (void)cls;
+    if (!(degrees >= 55.0f && degrees <= 90.0f)) return;
+    pthread_mutex_lock(&touch_lock);
+    field_of_view = degrees;
+    pthread_mutex_unlock(&touch_lock);
+}
+
+float host_touch_field_of_view(void)
+{
+    float degrees;
+    pthread_mutex_lock(&touch_lock);
+    degrees = field_of_view;
+    pthread_mutex_unlock(&touch_lock);
+    return degrees;
+}
+
+void host_touch_ui_context(int menus, int context)
+{
+    pthread_mutex_lock(&touch_lock);
+    if (ui_menus != menus) {
+        camera_pending = 0;
+        memset(touch_state, 0, sizeof(touch_state));
+        memset(look_delta, 0, sizeof(look_delta));
+        memset(ui_point, 0, sizeof(ui_point));
+    }
+    ui_menus = menus; if (context >= 0) ui_context = context;
+    pthread_mutex_unlock(&touch_lock);
+}
+
+void host_touch_pointer_read(float *point)
+{
+    pthread_mutex_lock(&touch_lock);
+    memcpy(point, ui_point, sizeof(ui_point));
+    ui_point[2] = ui_point[3] = ui_point[4] = ui_point[5] = 0;
+    pthread_mutex_unlock(&touch_lock);
+}
+
+void host_porting_menu_read(struct halo_porting_menu *menu)
+{
+    pthread_mutex_lock(&touch_lock);
+    memcpy(menu, &porting_menu, sizeof(*menu));
+    pthread_mutex_unlock(&touch_lock);
+}
+
+void host_porting_action(int revision, int action, int value)
+{
+    pthread_mutex_lock(&touch_lock);
+    if (!ui_action && revision == porting_menu.revision) {
+        ui_action = action; ui_value = value; ui_revision = revision;
+    }
+    pthread_mutex_unlock(&touch_lock);
+}
+
+void host_touch_frame(void)
+{
+    struct timespec now;
+    double elapsed;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    pthread_mutex_lock(&touch_lock);
+    if (!frame_time.tv_sec) frame_time = now;
+    ++frame_count;
+    elapsed = now.tv_sec-frame_time.tv_sec + (now.tv_nsec-frame_time.tv_nsec)/1e9;
+    if (elapsed >= 0.5) {
+        frame_fps = (int)(frame_count/elapsed + 0.5);
+        frame_count = 0; frame_time = now;
+    }
+    pthread_mutex_unlock(&touch_lock);
+}
+
+JNIEXPORT jintArray JNICALL Java_com_halo_decomp_TouchControls_nativeMenuPoll(JNIEnv *env, jclass cls)
+{
+    jint values[6]; jintArray result;
+    (void)cls;
+    pthread_mutex_lock(&touch_lock);
+    values[0] = ui_menus; values[1] = ui_context; values[2] = ui_action;
+    values[3] = ui_value; values[4] = ui_revision; values[5] = frame_fps;
+    ui_action = 0;
+    pthread_mutex_unlock(&touch_lock);
+    result = (*env)->NewIntArray(env, 6);
+    if (result) (*env)->SetIntArrayRegion(env, result, 0, 6, values);
+    return result;
+}
+
+JNIEXPORT void JNICALL Java_com_halo_decomp_TouchControls_nativeMenuPointer(
+    JNIEnv *env, jclass cls, jfloat x, jfloat y, jboolean click, jboolean back,
+    jfloat scroll, jboolean scrollbar)
+{
+    (void)env; (void)cls;
+    pthread_mutex_lock(&touch_lock);
+    if (ui_menus) {
+        ui_point[0] = x; ui_point[1] = y;
+        if (click) ui_point[2] = 1;
+        if (back) ui_point[3] = 1;
+        ui_point[4] += scroll;
+        if (scrollbar) ui_point[5] = 1;
+    }
+    pthread_mutex_unlock(&touch_lock);
+}
+
+JNIEXPORT void JNICALL Java_com_halo_decomp_TouchControls_nativeMenuPublish(
+    JNIEnv *env, jclass cls, jint revision, jint page, jboolean editing,
+    jstring title, jobjectArray labels, jintArray actions, jintArray values)
+{
+    struct halo_porting_menu next = {0};
+    const char *text; int i; jint ids[HALO_PORTING_ROWS], progress[HALO_PORTING_ROWS];
+    (void)cls;
+    next.revision = revision; next.page = page; next.editing = editing;
+    next.count = (*env)->GetArrayLength(env, labels);
+    if (next.count > HALO_PORTING_ROWS || (*env)->GetArrayLength(env, actions) != next.count ||
+        (*env)->GetArrayLength(env, values) != next.count) return;
+    text = (*env)->GetStringUTFChars(env, title, NULL);
+    if (!text) return;
+    strncpy(next.title, text, sizeof(next.title)-1);
+    (*env)->ReleaseStringUTFChars(env, title, text);
+    (*env)->GetIntArrayRegion(env, actions, 0, next.count, ids);
+    (*env)->GetIntArrayRegion(env, values, 0, next.count, progress);
+    for (i = 0; i < next.count; ++i) {
+        jstring label = (jstring)(*env)->GetObjectArrayElement(env, labels, i);
+        text = (*env)->GetStringUTFChars(env, label, NULL);
+        if (!text) return;
+        strncpy(next.rows[i].text, text, sizeof(next.rows[i].text)-1);
+        (*env)->ReleaseStringUTFChars(env, label, text);
+        (*env)->DeleteLocalRef(env, label);
+        next.rows[i].action = ids[i]; next.rows[i].value = progress[i];
+    }
+    pthread_mutex_lock(&touch_lock);
+    porting_menu = next;
+    pthread_mutex_unlock(&touch_lock);
+}
+
+void host_touch_rumble(unsigned int low, unsigned int high)
+{
+    unsigned int strength = low > high ? low : high;
+    pthread_mutex_lock(&touch_lock);
+    rumble_amplitude = strength ? 64 + (strength * 191u / 65535u) : 0;
+    clock_gettime(CLOCK_MONOTONIC, &rumble_time);
+    pthread_mutex_unlock(&touch_lock);
+}
+
+JNIEXPORT jint JNICALL Java_com_halo_decomp_TouchControls_nativeRumble(JNIEnv *env, jclass cls)
+{
+    struct timespec now;
+    int amplitude;
+    (void)env; (void)cls;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    pthread_mutex_lock(&touch_lock);
+    amplitude = rumble_amplitude;
+    if ((now.tv_sec-rumble_time.tv_sec)*1000000000LL + now.tv_nsec-rumble_time.tv_nsec > 150000000LL)
+        amplitude = 0;
+    pthread_mutex_unlock(&touch_lock);
+    return amplitude;
+}
+
+JNIEXPORT void JNICALL Java_com_halo_decomp_TouchControls_nativeLook(
+    JNIEnv *env, jclass cls, jfloat dx, jfloat dy)
+{
+    (void)env; (void)cls;
+    pthread_mutex_lock(&touch_lock);
+    if (!ui_menus) { look_delta[0] += dx; look_delta[1] += dy; }
+    clock_gettime(CLOCK_MONOTONIC, &look_time);
+    pthread_mutex_unlock(&touch_lock);
+}
+
+JNIEXPORT void JNICALL Java_com_halo_decomp_TouchControls_nativeLookReset(JNIEnv *env, jclass cls)
+{
+    (void)env; (void)cls;
+    pthread_mutex_lock(&touch_lock);
+    look_delta[0] = look_delta[1] = 0;
+    pthread_mutex_unlock(&touch_lock);
+}
+
+JNIEXPORT void JNICALL Java_com_halo_decomp_TouchControls_nativeCameraMode(JNIEnv *env, jclass cls)
+{
+    (void)env; (void)cls;
+    pthread_mutex_lock(&touch_lock);
+    if (!ui_menus) camera_pending = 1;
+    pthread_mutex_unlock(&touch_lock);
+}
+
+int host_touch_camera_read(void)
+{
+    int pending;
+    pthread_mutex_lock(&touch_lock);
+    pending = camera_pending; camera_pending = 0;
+    pthread_mutex_unlock(&touch_lock);
+    return pending;
+}
+
+void host_touch_look_read(float *delta)
+{
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    pthread_mutex_lock(&touch_lock);
+    memcpy(delta, look_delta, sizeof(look_delta));
+    /* Discard movement left over from menus, cutscenes or a suspended app. */
+    if ((now.tv_sec-look_time.tv_sec)*1000000000LL + now.tv_nsec-look_time.tv_nsec > 150000000LL)
+        delta[0] = delta[1] = 0;
+    look_delta[0] = look_delta[1] = 0;
+    pthread_mutex_unlock(&touch_lock);
+}
+
+JNIEXPORT jboolean JNICALL Java_com_halo_decomp_TouchControls_nativeCheatRequest(
+    JNIEnv *env, jclass cls, jint id, jboolean enabled)
+{
+    (void)env; (void)cls;
+    if (id < 0 || id >= 16) return JNI_FALSE;
+    pthread_mutex_lock(&touch_lock);
+    if (cheat_busy & (1u << id)) { pthread_mutex_unlock(&touch_lock); return JNI_FALSE; }
+    cheat_commands[id] = enabled != 0;
+    cheat_pending |= 1u << id;
+    cheat_busy |= 1u << id;
+    pthread_mutex_unlock(&touch_lock);
+    return JNI_TRUE;
+}
+
+JNIEXPORT jint JNICALL Java_com_halo_decomp_TouchControls_nativeCheatStatus(
+    JNIEnv *env, jclass cls, jint id)
+{
+    int status;
+    (void)env; (void)cls;
+    if (id < 0 || id >= 16) return -1;
+    pthread_mutex_lock(&touch_lock);
+    status = (cheat_busy & (1u << id)) ? -2 : cheat_status[id];
+    pthread_mutex_unlock(&touch_lock);
+    return status;
+}
+
+unsigned int host_touch_cheats_read(int *commands)
+{
+    unsigned int pending;
+    pthread_mutex_lock(&touch_lock);
+    pending = cheat_pending; cheat_pending = 0;
+    memcpy(commands, cheat_commands, sizeof(cheat_commands));
+    pthread_mutex_unlock(&touch_lock);
+    return pending;
+}
+
+void host_touch_cheat_result(int id, int status)
+{
+    pthread_mutex_lock(&touch_lock);
+    cheat_status[id] = status;
+    cheat_busy &= ~(1u << id);
+    pthread_mutex_unlock(&touch_lock);
+}
+
+void host_touch_cheat_sync(int id, int active)
+{
+    pthread_mutex_lock(&touch_lock);
+    if (!(cheat_busy & (1u << id)) && cheat_status[id] >= 0) cheat_status[id] = active;
+    pthread_mutex_unlock(&touch_lock);
+}
+

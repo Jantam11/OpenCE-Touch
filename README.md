@@ -10,6 +10,16 @@
 Get the Android touch version from this fork's [Releases](https://github.com/Jantam11/OpenCE-Touch/releases)
 ([latest APK](https://github.com/Jantam11/OpenCE-Touch/releases/latest/download/OpenCE-Touch.apk)).
 
+## Mobile feature credits
+
+- [theLlamaNet / FulGer — halo-ce-android](https://github.com/theLlamaNet/halo-ce-android): gyroscope aiming, rumble, fire-button drag aiming, Halo-style vector icons, portable layouts, Porting options, FOV/FPS settings, single-player cheats, free camera and encrypted relay fallback. Adapted to retain this fork's SDL virtual gamepad and working menu/profile-keyboard taps.
+- [JoshRob297 — halo-ce-touch](https://github.com/JoshRob297/halo-ce-touch): Bink movie playback from [his clean Bink branch](https://github.com/JoshRob297/halo-ce-touch/tree/bink-on-main), plus dedicated-server map/variant rotation, time limits and restart/join fixes. His touch work also builds on theLlamaNet's controls.
+- [FFmpeg](https://ffmpeg.org/): open-source Bink video/audio decoding, built from pinned LGPL source. Every Android release includes its license, exact source and relinking materials in the packaged build.
+
+Open **OPTIONS** or the native **Porting options** menu to change settings. Layouts can be exported/imported as `.halolayout`; imports from the two credited forks are supported. Gyroscope and vibration require suitable phone hardware. Cheats apply to single-player; startup choices take effect when a campaign starts after restarting the app.
+
+**Disc videos:** new installations extract `bink/` alongside `maps/`. Existing players can select **OPTIONS → Import disc movies** and choose their own Halo `.iso`/`.xiso`; this copies movies without replacing maps or profiles. Intro, credits and idle attract-demo videos play with audio, and a tap skips playback. No game videos are bundled in the APK. Other in-engine cutscenes still use the game's renderer.
+
 [![Join our Discord](https://invidget.switchblade.xyz/9gqcHyr5km)](https://discord.gg/9gqcHyr5km)
 
 This project is a port of the Halo: Combat Evolved decompilation to Linux,
