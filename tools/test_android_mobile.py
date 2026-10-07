@@ -114,9 +114,61 @@ int main(void) {
 }
 '''
 
+def test_network_helpers(folder):
+    source = (ROOT / "port/linux/game/network_test.c").read_text()
+    start=source.index("static boolean network_test_variant(")
+    end=source.index("static void network_test_read_settings(",start)
+    program = r'''#include <assert.h>
+#include <stdio.h>
+#include <string.h>
+typedef int boolean;
+#define FALSE 0
+#define TRUE 1
+struct {char spec[256],map_name[128],variant_name[64];short spec_index,variant_index;} network_test;
+''' + source[start:end] + r'''
+int main(void) {
+ char variant[64];strcpy(network_test.spec,"bloodgulch:slayer,ctf;hangemhigh:oddball");
+ network_test_select_map();assert(network_test_has_next_game());
+ assert(!strcmp(network_test.map_name,"bloodgulch"));assert(network_test_variant(0,variant,sizeof(variant))&&!strcmp(variant,"slayer"));
+ network_test_next_game();assert(network_test_variant(network_test.variant_index,variant,sizeof(variant))&&!strcmp(variant,"ctf"));
+ network_test_next_game();assert(!strcmp(network_test.map_name,"hangemhigh"));
+ network_test_next_game();assert(!strcmp(network_test.map_name,"bloodgulch")&&network_test.variant_index==0);
+ strcpy(network_test.spec,"levels\\a10\\a10:coop");network_test.spec_index=0;network_test_select_map();assert(!strcmp(network_test.map_name,"levels\\a10\\a10"));
+ strcpy(network_test.spec,"bloodgulch");network_test_select_map();assert(!strcmp(network_test.variant_name,"slayer"));
+ return 0;
+}
+'''
+    (folder/"rotation.c").write_text(program)
+    subprocess.run(["cc","-std=c99","-Wall","-Wextra","-Werror",str(folder/"rotation.c"),"-o",str(folder/"rotation")],check=True)
+    subprocess.run([str(folder/"rotation")],check=True)
+    source=(ROOT/"port/linux/src/p2p_signal.c").read_text()
+    start=source.index("static void broker_publish(");end=source.index("/* a publish at least once",start)
+    program=r'''#include <assert.h>
+#include <string.h>
+#define TOPIC_SIZE 64
+#define P2P_RELAY_PACKET_SIZE 1536
+struct broker {int protocol;};
+static unsigned char sent[2048];static int count,size;
+static int put_string(unsigned char *out,const char *s){int n=strlen(s);out[0]=n>>8;out[1]=n;memcpy(out+2,s,n);return n+2;}
+static void broker_send(struct broker *b,unsigned char type,const unsigned char *body,int n){(void)b;assert(type==0x30);memcpy(sent,body,n);size=n;count++;}
+'''+source[start:end]+r'''
+int main(void){
+ struct broker b={5};unsigned char payload[P2P_RELAY_PACKET_SIZE];memset(payload,0xab,sizeof(payload));
+ broker_publish(&b,"hceu/r/test",payload,sizeof(payload));assert(count==1&&size==14+sizeof(payload));assert(sent[13]==0&&!memcmp(sent+14,payload,sizeof(payload)));
+ broker_publish(&b,"hceu/r/test",payload,-1);broker_publish(&b,"hceu/r/test",payload,sizeof(payload)+1);assert(count==1);
+ b.protocol=4;broker_publish(&b,"hceu/r/test",payload,sizeof(payload));assert(count==2&&size==13+sizeof(payload)&&!memcmp(sent+13,payload,sizeof(payload)));
+ return 0;}
+'''
+    (folder/"relay.c").write_text(program)
+    subprocess.run(["cc","-std=c99","-Wall","-Wextra","-Werror",str(folder/"relay.c"),"-o",str(folder/"relay")],check=True)
+    subprocess.run([str(folder/"relay")],check=True)
+    print("Server rotation and MQTT 3/5 relay packet bounds checks passed.")
+
+
 def main():
     with tempfile.TemporaryDirectory() as directory:
         folder = Path(directory)
+        test_network_helpers(folder)
         (folder / "MobileCheck.java").write_text(JAVA_TEST)
         javac = ["javac"] if shutil.which("javac") else ["java", "-m", "jdk.compiler/com.sun.tools.javac.Main"]
         subprocess.run([*javac,"-d",str(folder),*[str(JAVA / (name+".java")) for name in
