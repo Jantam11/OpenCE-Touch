@@ -49,6 +49,67 @@ int main(void) {
 ''')
 
 
+def test_controller_ports():
+    source = (ROOT / "port/linux/src/xinput_sdl.c").read_text()
+    start = source.index("static int sdl_gamepads(")
+    end = source.index("static SHORT stick(", start)
+    compile_and_run('''
+#include <assert.h>
+#include <stdlib.h>
+#include <string.h>
+#define HALO_ANDROID 1
+#define PORT_COUNT 4
+#define TRUE 1
+#define FALSE 0
+#define SDL_GAMEPAD_BUTTON_COUNT 26
+#define SDL_GAMEPAD_AXIS_COUNT 6
+#define SDL_GAMEPAD_TYPE_UNKNOWN 0
+#define SDL_GAMEPAD_TYPE_STANDARD 1
+typedef int BOOL;
+typedef int SDL_JoystickID;
+typedef int SDL_GamepadType;
+typedef int SDL_GamepadButton;
+typedef int SDL_GamepadAxis;
+typedef struct { int id, type, virtual_pad, held; } SDL_Gamepad;
+static SDL_Gamepad pads[] = {{1, 2, 0, 0}, {2, 0, 0, 0}, {3, 1, 1, 0}};
+static int listed = 3, split = 1;
+static SDL_JoystickID *SDL_GetGamepads(int *count) {
+    int *ids = malloc(3 * sizeof(int));
+    *count = listed;
+    for (int i = 0; i < listed; i++) ids[i] = pads[i].id;
+    return ids;
+}
+static SDL_Gamepad *SDL_GetGamepadFromID(int id) {
+    for (int i = 0; i < 3; i++) if (pads[i].id == id) return &pads[i];
+    return NULL;
+}
+static int SDL_GetGamepadType(SDL_Gamepad *pad) { return pad->type; }
+static int SDL_GetGamepadID(SDL_Gamepad *pad) { return pad->id; }
+static int SDL_IsJoystickVirtual(int id) { return SDL_GetGamepadFromID(id)->virtual_pad; }
+static int SDL_GetGamepadButton(SDL_Gamepad *pad, int button) { (void)button; return pad->held; }
+static int SDL_GetGamepadAxis(SDL_Gamepad *pad, int axis) { (void)pad; (void)axis; return 0; }
+static int pc_menu_split_players(void) { return split; }
+#define SDL_free free
+''' + source[start:end] + r'''
+int main(void) {
+    SDL_Gamepad *gamepads[PORT_COUNT];
+    assert(sdl_gamepads(gamepads) == 3);
+    assert(gamepads[0]->id == 3); /* touch first, recognised physical second */
+    assert(gamepads[1]->id == 1 && gamepads[2]->id == 2);
+    assert(port_gamepad(gamepads, 3, 0)->id == 3);
+    gamepads[0]->held = 1; /* B held while a split-screen profile closes */
+    assert(port_gamepad(gamepads, 1, 0)->id == 3);
+    assert(port_gamepad(gamepads, 1, 1) == NULL);
+    split = 0;
+    assert(port_gamepad(gamepads, 1, 0)->id == 3);
+    gamepads[0] = &pads[0]; pads[0].held = 0; split = 1;
+    assert(port_gamepad(gamepads, 1, 0) == NULL); /* physical pad retains upstream behaviour */
+    assert(port_gamepad(gamepads, 1, 1)->id == 1);
+    return 0;
+}
+''')
+
+
 def test_menu_coordinates():
     source = (ROOT / "port/linux/src/d3d8_gl.c").read_text()
     start = source.index("static void ui_point_from_window(")
@@ -130,6 +191,7 @@ int main(void) {
 
 if __name__ == "__main__":
     test_taps_and_cancel()
+    test_controller_ports()
     test_menu_coordinates()
     test_keyboard_pointer()
-    print("Touch tap/cancel, menu-coordinate and profile keyboard regression checks passed.")
+    print("Touch tap/cancel, controller ports, menu-coordinate and profile keyboard checks passed.")
