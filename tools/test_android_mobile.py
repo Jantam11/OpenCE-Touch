@@ -39,6 +39,8 @@ public class MobileCheck {
   rejects("x".repeat(65537));
   TouchConfiguration imported=TouchConfiguration.decode("format=halo-touch-layout\nversion=4\ncount=3\ncontrol.0.type=16\ncontrol.0.x=480\ncontrol.0.y=270\ncontrol.1.type=17\ncontrol.1.x=960\ncontrol.1.y=540\ncontrol.2.type=18\n");
   require(imported.buttons.get(0).kind==1&&imported.buttons.get(0).x==.5f&&imported.buttons.get(1).action==1016&&imported.buttons.get(2).action==2000);
+  require(imported.buttons.size()==4&&imported.buttons.get(3).kind==2);
+  require(TouchConfiguration.decode(imported.encode()).buttons.get(3).kind==2);
   rejects("format=halo-touch-layout\nversion=4\ncount=2\ncontrol.0.type=16\ncontrol.1.type=16\n");
   rejects("format=halo-touch-layout\nversion=4\ncount=1\ncontrol.0.type=0\ncontrol.0.visible=false\n");
   GyroscopeAim gyro=new GyroscopeAim(); float[] delta=new float[2];
@@ -114,6 +116,70 @@ int main(void) {
 }
 '''
 
+def test_singleplayer_cheats(folder):
+    source = (ROOT / "source/game/cheats.c").read_text()
+    start = source.index("void android_touch_cheats_update(void)")
+    end = source.index("\n#endif", start)
+    program = r'''#include <assert.h>
+#include <string.h>
+typedef int boolean;
+#define FALSE 0
+#define TRUE 1
+#define NONE -1
+#define _game_connection_local 0
+static struct {boolean deathless_player,jetpack,infinite_ammo,bump_possession,super_jump,reflexive_damage_effects,medusa,omnipotent,controller_enabled,bottomless_clip;} cheat;
+static unsigned int android_startup_pending,android_cheat_owned;
+static int android_startup_flags[10];
+static boolean android_startup_loaded,android_cheat_previous[10];
+static struct {long unit_index;} player={0};
+static struct {struct {long cluster_index;} location;} camera={{0}};
+static int connection,client,result,one_shots;
+static unsigned int requests;
+static int requested[16],synced[16];
+static unsigned int host_touch_cheats_read(int commands[16]){memcpy(commands,requested,sizeof(requested));unsigned int bits=requests;requests=0;return bits;}
+static long local_player_get_player_index(int i){(void)i;return 0;}
+static void *player_get(long i){(void)i;return &player;}
+static int game_connection(void){return connection;}
+static void cheats_network_client_enforce(void){if(client)memset(&cheat,0,sizeof(cheat));}
+static void host_touch_cheat_result(int i,int value){(void)i;result=value;}
+static void host_touch_cheat_sync(int i,int value){synced[i]=value;}
+static void cheat_active_camouflage_local_player(int i){(void)i;one_shots++;}
+static void cheat_active_camouflage(void){one_shots++;}
+static void cheat_all_powerups(void){one_shots++;}
+static void cheat_all_vehicles(void){one_shots++;}
+static void cheat_all_weapons(void){one_shots++;}
+static void cheat_teleport_to_camera(void){one_shots++;}
+static void *observer_get_camera(int i){(void)i;return &camera;}
+'''
+    # Production getters return typed pointers; mirror those types in the harness.
+    program = program.replace('static struct {long unit_index;} player', 'struct test_player {long unit_index;};static struct test_player player')
+    program = program.replace('static struct {struct {long cluster_index;} location;} camera', 'struct test_camera {struct {long cluster_index;} location;};static struct test_camera camera')
+    program = program.replace('static void *player_get', 'static struct test_player *player_get').replace('static void *observer_get_camera', 'static struct test_camera *observer_get_camera')
+    program += source[start:end] + r'''
+int main(void){
+ // UI flags are reversible when leaving campaign, including when hosting.
+ cheat.jetpack=1;requests=5;requested[0]=requested[2]=1;android_touch_cheats_update();
+ assert(cheat.deathless_player&&cheat.infinite_ammo&&cheat.jetpack&&android_cheat_owned==5);
+ connection=1;requests=1;android_touch_cheats_update();
+ assert(!cheat.deathless_player&&!cheat.infinite_ammo&&cheat.jetpack&&!android_cheat_owned&&result==-1);
+ requests=1u<<14;android_touch_cheats_update();assert(one_shots==0&&result==-1);
+ // Startup choices wait for a playable local unit and preserve prior values.
+ connection=0;player.unit_index=NONE;android_startup_loaded=1;android_startup_flags[0]=1;android_startup_pending=1u<<14;
+ android_touch_cheats_update();assert(android_startup_loaded&&!cheat.deathless_player&&one_shots==0);
+ player.unit_index=0;android_touch_cheats_update();assert(!android_startup_loaded&&cheat.deathless_player&&!cheat.jetpack&&one_shots==1);
+ android_touch_cheats_update();assert(one_shots==1);
+ connection=1;android_touch_cheats_update();assert(!cheat.deathless_player&&cheat.jetpack);
+ // A joined client still obeys the upstream enforcement after restoration.
+ connection=0;requests=2;requested[1]=0;android_touch_cheats_update();
+ connection=1;client=1;android_touch_cheats_update();assert(!cheat.jetpack&&!synced[1]);
+ return 0;}
+'''
+    (folder/"cheats.c").write_text(program)
+    subprocess.run(["cc","-std=c99","-Wall","-Wextra","-Werror",str(folder/"cheats.c"),"-o",str(folder/"cheats")],check=True)
+    subprocess.run([str(folder/"cheats")],check=True)
+    print("Single-player cheat isolation and startup lifecycle checks passed.")
+
+
 def test_network_helpers(folder):
     source = (ROOT / "port/linux/game/network_test.c").read_text()
     start=source.index("static boolean network_test_variant(")
@@ -168,6 +234,7 @@ int main(void){
 def main():
     with tempfile.TemporaryDirectory() as directory:
         folder = Path(directory)
+        test_singleplayer_cheats(folder)
         test_network_helpers(folder)
         (folder / "MobileCheck.java").write_text(JAVA_TEST)
         javac = ["javac"] if shutil.which("javac") else ["java", "-m", "jdk.compiler/com.sun.tools.javac.Main"]
