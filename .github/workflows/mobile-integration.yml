@@ -1,0 +1,30 @@
+name: Integrate approved mobile features
+on:
+  push:
+    branches: [touch-controls]
+    paths: [.github/workflows/mobile-integration.yml]
+permissions:
+  contents: write
+  actions: write
+jobs:
+  integrate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply reviewed integration
+        run: |
+          git apply --check mobile-integration.patch
+          git apply mobile-integration.patch
+          rm mobile-integration.patch .github/workflows/mobile-integration.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github CHANGELOG.md MODLOG.md README.md port source tools mobile-integration.patch
+          git commit -m "Integrate credited mobile features, disc videos and server improvements"
+          git push origin HEAD:touch-controls
+      - name: Run complete build checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run build.yml --ref touch-controls
