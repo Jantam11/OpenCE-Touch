@@ -93,6 +93,15 @@ final class TouchConfiguration {
             c.buttons.add(b);
         }
         if (c.buttons.isEmpty()) throw new IllegalArgumentException("Layout hides every control");
+        // Foreign layouts aim on empty screen space. Our virtual pad uses an
+        // explicit aim region, so include one when translating those layouts.
+        if (llama) {
+            if (c.buttons.size() == LIMIT) throw new IllegalArgumentException("Layout needs room for an aim pad");
+            Button aim = new Button();
+            aim.id = "importedAim"; aim.label = "AIM"; aim.kind = 2;
+            aim.x = .72f; aim.y = .52f; aim.radius = .16f; aim.opacity = .3f;
+            c.buttons.add(aim);
+        }
         return c;
     }
 }
