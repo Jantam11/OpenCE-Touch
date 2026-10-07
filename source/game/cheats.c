@@ -74,6 +74,8 @@ symbols in this file:
 static unsigned int android_startup_pending;
 static int android_startup_flags[10];
 static boolean android_startup_loaded;
+static unsigned int android_cheat_owned;
+static boolean android_cheat_previous[10];
 
 /* Read only the menu-owned block, once for each map. One-shot commands wait
    until the local player's unit exists; the UI map never consumes them. */
@@ -550,10 +552,21 @@ void android_touch_cheats_update(void)
         player_index != NONE && player_get(player_index)->unit_index != NONE;
     int i;
 
+    /* Undo only flags changed by the single-player panel before entering a
+       hosted or joined network game. Leave independent console settings alone. */
+    if (game_connection() != _game_connection_local) {
+        for (i = 0; i < 10; i++)
+            if (android_cheat_owned & (1u << i)) *flags[i] = android_cheat_previous[i];
+        android_cheat_owned = 0;
+    }
     cheats_network_client_enforce();
     if (available) {
         if (android_startup_loaded) {
-            for (i = 0; i < 10; i++) *flags[i] = android_startup_flags[i] != 0;
+            for (i = 0; i < 10; i++) {
+                if (!(android_cheat_owned & (1u << i))) android_cheat_previous[i] = *flags[i];
+                android_cheat_owned |= 1u << i;
+                *flags[i] = android_startup_flags[i] != 0;
+            }
             android_startup_loaded = FALSE;
         }
         for (i = 10; i < 16; i++) {
@@ -574,7 +587,11 @@ void android_touch_cheats_update(void)
             else
             {
                 int result = 1;
-                if (i < 10) { *flags[i] = commands[i] != 0; result = *flags[i]; }
+                if (i < 10) {
+                    if (!(android_cheat_owned & (1u << i))) android_cheat_previous[i] = *flags[i];
+                    android_cheat_owned |= 1u << i;
+                    *flags[i] = commands[i] != 0; result = *flags[i];
+                }
                 else switch (i)
                 {
                 case 10: cheat_active_camouflage_local_player(0); break;
