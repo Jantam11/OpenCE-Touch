@@ -102,6 +102,9 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      - name: Touch input regression checks
+        run: python3 tools/test_android_touch.py
+
       - uses: actions/cache@v4
         with:
           path: .ccache
