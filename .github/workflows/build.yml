@@ -24,6 +24,11 @@ on:
     paths-ignore:
       - "**.md"
   workflow_dispatch:
+    inputs:
+      publish_touch:
+        description: Publish the touch release after all build checks pass
+        type: boolean
+        default: false
 
 concurrency:
   group: build-${{ github.ref }}
@@ -322,6 +327,17 @@ jobs:
           while read -r tag; do
             gh release delete "$tag" --cleanup-tag --yes
           done
+
+  touch_release:
+    needs: [linux, android, windows]
+    if: ${{ github.ref == 'refs/heads/touch-controls' && (inputs.publish_touch == true || startsWith(github.event.head_commit.message, 'Release OpenCE-Touch ')) }}
+    permissions:
+      contents: write
+      actions: read
+    uses: ./.github/workflows/touch-release.yml
+    with:
+      build_run: ${{ format('{0}', github.run_id) }}
+      tag: v0.4.0-touch
 
   notify:
     # A Discord embed for the run, to the DISCORD_WEBHOOK secret (nothing
