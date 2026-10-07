@@ -7,6 +7,9 @@
 > Touch builds are on the [`touch-controls`](https://github.com/Jantam11/OpenCE-Touch/tree/touch-controls) branch;
 > the download links below point to upstream OpenCE releases.
 
+Get the Android touch version from this fork's [Releases](https://github.com/Jantam11/OpenCE-Touch/releases)
+([latest APK](https://github.com/Jantam11/OpenCE-Touch/releases/latest/download/OpenCE-Touch.apk)).
+
 [![Join our Discord](https://invidget.switchblade.xyz/9gqcHyr5km)](https://discord.gg/9gqcHyr5km)
 
 This project is a port of the Halo: Combat Evolved decompilation to Linux,
