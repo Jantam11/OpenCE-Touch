@@ -36,6 +36,7 @@ this list to generate the guest's entry points */
 	X(glGenerateMipmap) \
 	X(glGetError) \
 	X(glEnable) \
+	X(glIsEnabled) \
 	X(glDisable) \
 	X(glViewport) \
 	X(glDepthRangef) \
@@ -51,6 +52,7 @@ this list to generate the guest's entry points */
 	X(glStencilOp) \
 	X(glStencilMask) \
 	X(glBlendFunc) \
+	X(glBlendFuncSeparate) \
 	X(glBlendEquation) \
 	X(glBlendColor) \
 	X(glCullFace) \
@@ -146,6 +148,7 @@ this list to generate the guest's entry points */
 	X(glGenerateMipmap) \
 	X(glGetError) \
 	X(glEnable) \
+	X(glIsEnabled) \
 	X(glDisable) \
 	X(glViewport) \
 	X(glDepthRange) \
@@ -161,6 +164,7 @@ this list to generate the guest's entry points */
 	X(glStencilOp) \
 	X(glStencilMask) \
 	X(glBlendFunc) \
+	X(glBlendFuncSeparate) \
 	X(glBlendEquation) \
 	X(glBlendColor) \
 	X(glCullFace) \
@@ -270,6 +274,7 @@ pointers, sees the declarations without these aliases */
 #define glGenerateMipmap halo_glGenerateMipmap
 #define glGetError halo_glGetError
 #define glEnable halo_glEnable
+#define glIsEnabled halo_glIsEnabled
 #define glDisable halo_glDisable
 #define glViewport halo_glViewport
 #define glDepthRangef halo_glDepthRangef
@@ -285,6 +290,7 @@ pointers, sees the declarations without these aliases */
 #define glStencilOp halo_glStencilOp
 #define glStencilMask halo_glStencilMask
 #define glBlendFunc halo_glBlendFunc
+#define glBlendFuncSeparate halo_glBlendFuncSeparate
 #define glBlendEquation halo_glBlendEquation
 #define glBlendColor halo_glBlendColor
 #define glCullFace halo_glCullFace
@@ -378,6 +384,7 @@ pointers, sees the declarations without these aliases */
 #define glGenerateMipmap halo_glGenerateMipmap
 #define glGetError halo_glGetError
 #define glEnable halo_glEnable
+#define glIsEnabled halo_glIsEnabled
 #define glDisable halo_glDisable
 #define glViewport halo_glViewport
 #define glDepthRange halo_glDepthRange
@@ -393,6 +400,7 @@ pointers, sees the declarations without these aliases */
 #define glStencilOp halo_glStencilOp
 #define glStencilMask halo_glStencilMask
 #define glBlendFunc halo_glBlendFunc
+#define glBlendFuncSeparate halo_glBlendFuncSeparate
 #define glBlendEquation halo_glBlendEquation
 #define glBlendColor halo_glBlendColor
 #define glCullFace halo_glCullFace

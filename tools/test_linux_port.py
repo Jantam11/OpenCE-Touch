@@ -424,3 +424,21 @@ def test_custom_edition_loader_and_validator_survive_damaged_maps():
     result = subprocess.run([str(MAP_VALIDATE), "--fuzz", "100", "--seed", "1", *map(str, chosen)],
                             capture_output=True, text=True, timeout=3600)
     assert result.returncode == 0, (result.stdout + result.stderr)[-6000:]
+
+
+def test_overlay_and_shader_cache_gl_calls_use_runtime_loader():
+    """New renderer units must use the native loader, including Android's bridge.
+    A declared system GL prototype alone compiles but fails at native link time.
+    """
+    from tools.android_gl_stubs import android_functions
+    root = MENUS.parent.parent.parent
+    header = root / "port/linux/src/gl.h"
+    text = header.read_text()
+    android = set(android_functions(str(header)))
+    desktop = set(re.findall(r"X\((gl\w+)\)", text.split("/* ANDROID_GL_FUNCTIONS_END */")[1]))
+    aliases = set(re.findall(r"#define (gl\w+) halo_gl\w+", text))
+    for name in ("ui_overlay.c", "xgpu_shader_cache.c"):
+        calls = set(re.findall(r"\b(gl[A-Z]\w*)\(", (header.parent / name).read_text()))
+        assert calls <= desktop & aliases
+        # Desktop clip control is explicitly guarded out on ES.
+        assert calls - {"glClipControl"} <= android & aliases
