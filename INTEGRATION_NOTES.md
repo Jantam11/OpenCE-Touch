@@ -1,7 +1,7 @@
 # 2026-10-08 integration
 
 The baseline was OpenCE-Touch `062566ac` (v0.4.0-touch). Upstream
-`OpenCommunityEdition/OpenCE` was advanced to `2d2348cd` in merge
+`OpenCommunityEdition/OpenCE` was initially advanced to `2d2348cd` in merge
 [`f6c912ff`](https://github.com/Jantam11/OpenCE-Touch/commit/f6c912ffa30bb55969edd8b4f232fbae861b14ee).
 Both parents are preserved; 88 upstream commits bring the native rendering,
 co-op, networking and menu changes forward. Network protocol is now 24 as in
@@ -10,6 +10,13 @@ upstream. Previous protocol-22 builds need updating to join protocol-24 games.
 [Upstream-merge CI](https://github.com/Jantam11/OpenCE-Touch/actions/runs/37762090042)
 passed Linux, Windows and Android debug/release builds and the existing tests
 before the merge was published to touch-controls.
+
+A final upstream check also merged `73dc01d0` in
+[`d3b86268`](https://github.com/Jantam11/OpenCE-Touch/commit/d3b86268f4ff555dc54558a9723c3889e501b705),
+preserving the ChupathingyCE sound changes and both upstream histories.
+These three additional commits repair positional stereo distance attenuation
+and reverb; all upstream platform jobs passed in run 37764567816. The complete
+update contains 91 new upstream commits.
 
 ## Selected fork ports
 
@@ -58,8 +65,11 @@ the local dedicated host may lack a player. Menu XML references, handlers,
 settings and artwork are checked separately for all four themes. Changed native
 sources and the generated embedded assets compile locally as 32-bit objects.
 
-All three platform CI builds/tests are required before publishing the feature
-head. This environment has no connected Android phone/emulator, owned game
+[Final integration CI](https://github.com/Jantam11/OpenCE-Touch/actions/runs/37769789258)
+passed for code commit `3897fc42`: Linux, Windows and Android debug/release
+builds and the available regression checks. The resulting source also includes
+native split-screen/next-map browser entry points and desktop-only SDL/GL guards
+for the Android guest. This environment has no connected Android phone/emulator, owned game
 assets, or live second client. Compilation and deterministic regression checks
 cannot prove visual layout, gameplay, gyro hardware, driver shader warm-up or
 live-server joins/rotation. Docker/systemd templates are supplied, not deployed.
