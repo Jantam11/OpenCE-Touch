@@ -8,7 +8,7 @@ on:
       tag:
         description: Release version
         required: true
-        default: v0.4.0-touch
+        default: v0.5.0-touch
   workflow_call:
     inputs:
       build_run:
