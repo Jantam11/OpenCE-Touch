@@ -2143,6 +2143,9 @@ static boolean multiplayer_level_list_dispose(
 	struct event_record *event,
 	boolean *widget_deleted)
 {
+	/* port: do not retain a pointer to this list after it is deleted. */
+	{ extern void map_screen_list_disposed(struct widget_instance *);
+		map_screen_list_disposed(widget); }
 	widget->generated_list = NULL;
 	widget->generated_count = 0;
 	return TRUE;
@@ -3024,6 +3027,9 @@ static boolean multiplayer_level_list_initialize(
 		if (widget->data3C.selected_index == level_count)
 			widget->data3C.selected_index = 0;
 	}
+	/* port: share the picker with the native split-screen/next-map list. */
+	{ extern boolean map_screen_open_over_list(struct widget_instance *);
+		map_screen_open_over_list(widget); }
 	return TRUE;
 }
 

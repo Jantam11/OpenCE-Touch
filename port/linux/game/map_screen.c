@@ -630,6 +630,12 @@ void map_screen_close(void)
 	map_screen.xbox_list = NULL;
 }
 
+void map_screen_list_disposed(struct widget_instance *list)
+{
+	if (map_screen.xbox_list == list)
+		map_screen_close();
+}
+
 void map_screen_server_disposed(void)
 {
 	map_screen_close();

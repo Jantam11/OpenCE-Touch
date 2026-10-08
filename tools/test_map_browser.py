@@ -68,7 +68,10 @@ int main(void) {
  assert(map_screen_open());map_screen.step=STEP_CAMPAIGN_LEVELS;back();assert(map_screen.step==STEP_CAMPAIGN_CATEGORIES);
  back();back();assert(map_screen.step==STEP_KINDS);back();assert(!map_screen.active&&went_back==1);
  assert(map_screen_open());map_screen.hosting=0;map_screen.step=STEP_CATEGORIES;back();assert(!map_screen.active&&went_back==2);
- assert(map_screen_open());map_screen.xbox_list=&xbox;map_screen_close();assert(!map_screen.active&&!map_screen.xbox_list);
+ assert(map_screen_open());map_screen.xbox_list=&xbox;
+ map_screen_list_disposed(NULL);assert(map_screen.active&&map_screen.xbox_list==&xbox);
+ map_screen_list_disposed(&xbox);assert(!map_screen.active&&!map_screen.xbox_list);
+ assert(map_screen_open());map_screen_close();assert(!map_screen.active);
  puts("PASS: disabled fallback, settled opening, stock/CE filtering, co-op/PvP selection, empty lists, back navigation and cleanup");
  return 0;
 }
@@ -79,7 +82,7 @@ def main():
     entry_start=text.index('struct map_entry\n');entry_brace=text.index('{',entry_start)
     entry=text[entry_start:entry_brace]+c_block(text,entry_brace)+';'
     globals_start=text.index('static struct\n');globals_end=text.index('/* ---------- private code */',globals_start)
-    definitions='\n'.join(function(text,n) for n in ('level_vanilla','category_levels','campaign_levels','list_open','leave','pick','back','map_screen_close','map_screen_open'))
+    definitions='\n'.join(function(text,n) for n in ('level_vanilla','category_levels','campaign_levels','list_open','leave','pick','back','map_screen_close','map_screen_list_disposed','map_screen_open'))
     with tempfile.TemporaryDirectory(prefix='opence-map-picker-') as d:
         unit=Path(d)/'maps.c';exe=Path(d)/'maps'
         unit.write_text(PRELUDE+constants+entry+text[globals_start:globals_end]+definitions+TESTS)
