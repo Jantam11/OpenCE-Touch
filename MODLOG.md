@@ -74,3 +74,11 @@ Final code: 3897fc42919daae097c43ef0017bb3b678c3ec0c. All Linux, Windows and And
 A final upstream check incorporated the three additional commits through 73dc01d09a21875f14c77b4430f20518d1f5ad09 in merge d3b86268, with upstream Linux/Windows/Android jobs passing in run 37764567816. Both upstream histories and the ChupathingyCE sound changes are preserved (91 new upstream commits in total). The native Xbox split-screen/next-map lists also open the map browser; list disposal clears only its own overlay. CI portability repairs register the overlay's GL functions, guard desktop clip controls on Android, and exclude desktop-only SDL event pumping from the guest.
 
 Published the validated source and these documentation-only final notes to touch-controls without rewriting history. Optional themes start at Default, existing layouts are retained, and the fqlx preset round-trips through the existing portable format. Existing touch/movie/gyro/cheat/network regressions pass. Phone gameplay, gyro hardware, shader warm-up on a real GPU and live two-client server verification remain untested here. No pfista map-management code was added.
+
+## 2026-10-08 Android visual repair and Quit
+- Baseline e4c22f8f; screenshot symptoms consistent with OpenCE PR #165. Upstream renderer race inherited; phone attribution unverified.
+- Adapted per-segment upload guard from kirklandsig #165 and Android exit handler from FernandolDev #183.
+- Removed fork a97cd967 Quit-to-Porting-options interception; preserved native confirmation/cancel and put Porting options below the menu list.
+- Added tools/test_android_render_quit.py: production mirror_refresh with delayed-copy model, rollover/segment checks, old-code negative control; production Android quit exit + old-code negative control; all theme confirmation routes.
+- Local render/quit and touch checks pass; Java/mobile/game/network checks passed before native portion found missing JNI headers. Android CI runs the entire suite and builds both APK configurations.
+- Release workflow targets v0.5.1-touch, checks Android success on exact SHA and packages APK, licenses, relinking sources and checksums. No phone gameplay run here.

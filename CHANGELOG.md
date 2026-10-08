@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.1-touch — 2026-10-08
+
+Changes since [v0.5.0-touch](https://github.com/Jantam11/OpenCE-Touch/releases/tag/v0.5.0-touch):
+
+- Fixed an inherited Android/Mali upload race that can cause stretched geometry and missing floor/ceiling surfaces after changing maps. Adapted [kirklandsig's upstream PR #165](https://github.com/OpenCommunityEdition/OpenCE/pull/165); this is a targeted fix, not a full upstream update.
+- Restored main-screen **Quit** with the existing **Are you sure?** confirmation. Confirming closes the Android app; Back cancels. **Porting options** stays available as a separate row. Android exit handling is adapted from [FernandolDev's PR #183](https://github.com/OpenCommunityEdition/OpenCE/pull/183). No app-exit button was added to the pause menu.
+- Android-only validation and release packaging for `touch-controls`; Android version code increased to 6. Includes production-code upload-race and Quit checks with negative controls. Windows/Linux builds are skipped for this branch.
+
+**Validation limits:** screenshots match the known Mali race, but its responsibility for this phone's artifacts remains a diagnosis to confirm by retesting. No phone is connected here; compilation and modeled upload checks do not prove in-game rendering or measure phone performance. Retest The Pillar of Autumn after the menu/map loads, restart/reload it, then enter Halo. Protocol 24 and the 0.5.0 features remain unchanged.
+
+**Credits:** [OpenCommunityEdition/OpenCE](https://github.com/OpenCommunityEdition/OpenCE), kirklandsig (renderer fix), FernandolDev (Android exit fix), and retained work from [ChupathingyCE](https://github.com/ChupathingyCE/chupathingyce), [xshxdex98/DamnationCE](https://github.com/xshxdex98/DamnationCE), [fqlx/OpenCE](https://github.com/fqlx/OpenCE), [theLlamaNet / FulGer](https://github.com/theLlamaNet/halo-ce-android), [JoshRob297](https://github.com/JoshRob297/halo-ce-touch) and [FFmpeg](https://ffmpeg.org/). Integration and regression checks coded with AI (OpenAI Codex), maintained by Jantam11. Dependency licenses and relinking materials remain in the packaged ZIP.
+
+[Full comparison](https://github.com/Jantam11/OpenCE-Touch/compare/v0.5.0-touch...v0.5.1-touch)
+
 ## 0.5.0-touch — 2026-10-08
 
 Changes since [v0.4.0-touch](https://github.com/Jantam11/OpenCE-Touch/releases/tag/v0.4.0-touch): 103 commits, including 91 upstream commits.

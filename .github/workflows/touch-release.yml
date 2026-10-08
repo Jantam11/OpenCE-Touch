@@ -8,7 +8,7 @@ on:
       tag:
         description: Release version
         required: true
-        default: v0.5.0-touch
+        default: v0.5.1-touch
   workflow_call:
     inputs:
       build_run:
@@ -38,7 +38,7 @@ jobs:
           gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN" > run.json
           jq -e --arg sha "$GITHUB_SHA" '.head_sha == $sha and .name == "Build"' run.json
           gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN/jobs?per_page=100" > jobs.json
-          jq -e '[.jobs[] | select(.name == "linux" or .name == "android" or .name == "windows")] | length == 3 and all(.conclusion == "success")' jobs.json
+          jq -e '[.jobs[] | select(.name == "android")] | length == 1 and all(.conclusion == "success")' jobs.json
       - name: Download and verify Android release
         run: |
           gh run download "$BUILD_RUN" --name halo-android-release --dir package
@@ -64,7 +64,7 @@ jobs:
           entries=Path('CHANGELOG.md').read_text().split('## ')
           entry=next(e for e in entries if e.startswith(version+' '))
           notes=entry.split('\n',1)[1].strip()
-          notes+='\n\nDownload **OpenCE-Touch.apk** to install. The ZIP also includes dependency licenses and FFmpeg source/relinking materials.\n\nChecked: Android, Linux and Windows debug/release builds; touch/profile keyboard and mobile feature regressions. Real-phone gameplay, gyro/rumble, video/audio and Internet relay testing remain to be confirmed.\n\nSigning: without configured signing secrets, CI uses a temporary runner key. Installation over an older APK may fail. Back up your profiles/saves before uninstalling an older version.\n\nBuild: https://github.com/'+os.environ['GH_REPO']+'/actions/runs/'+os.environ['BUILD_RUN']+'\n'
+          notes+='\n\nDownload **OpenCE-Touch.apk** to install. The ZIP also includes dependency licenses and FFmpeg source/relinking materials.\n\nChecked: Android debug/release builds; touch/profile keyboard, mobile feature and renderer/quit regression checks. Real-phone gameplay, gyro/rumble, video/audio and Internet relay testing remain to be confirmed.\n\nSigning: without configured signing secrets, CI uses a temporary runner key. Installation over an older APK may fail. Back up your profiles/saves before uninstalling an older version.\n\nBuild: https://github.com/'+os.environ['GH_REPO']+'/actions/runs/'+os.environ['BUILD_RUN']+'\n'
           Path('notes.md').write_text(notes)
           PY
           gh release create "$TAG" release/* --target "$GITHUB_SHA" --latest --title "OpenCE-Touch ${TAG#v}" --notes-file notes.md

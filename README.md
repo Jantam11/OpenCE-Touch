@@ -20,6 +20,12 @@ Open **OPTIONS** or the native **Porting options** menu to change settings. Layo
 
 **Disc videos:** new installations extract `bink/` alongside `maps/`. Existing players can select **OPTIONS → Import disc movies** and choose their own Halo `.iso`/`.xiso`; this copies movies without replacing maps or profiles. Intro, credits and idle attract-demo videos play with audio, and a tap skips playback. No game videos are bundled in the APK. Other in-engine cutscenes still use the game's renderer.
 
+## Android fixes in 0.5.1-touch
+
+- Main-screen Quit asks for confirmation and closes the app when confirmed; Back cancels. Porting options is a separate row below Quit. The native pause menu keeps its normal Save and Quit behavior.
+- Targeted renderer fix adapted from [kirklandsig's OpenCE PR #165](https://github.com/OpenCommunityEdition/OpenCE/pull/165), avoiding an Android/Mali buffer-copy race that produces stretched geometry or missing world surfaces. Android exit handling adapted from [FernandolDev's PR #183](https://github.com/OpenCommunityEdition/OpenCE/pull/183).
+- The `touch-controls` branch builds/tests and packages Android only. Phone gameplay still needs confirmation using your own game data.
+
 ## Fork features added on 2026-10-08
 
 - [ChupathingyCE](https://github.com/ChupathingyCE/chupathingyce): persistent shader warm-up/cache, sound lifetime and stream-underrun fixes, less profile/map I/O in menus, profile keyboard Enter handoff, profile-name reuse, paused multiplayer input/crouch fixes, finer mouse sensitivity and independent Sinc/Linear audio resampling. Desktop [playlist server tools](server/README.md) add unattended hosting, map/game-type rotation and idle/empty-game recovery using OpenCE networking.

@@ -1142,12 +1142,14 @@ static void platform_show_pending_message(void)
 
 /* ---------- events */
 
-/* quits as closing the window does, when the events are next read (the
-menus' Quit: port/linux/game/menu_functions.c); Android's menus have none,
-as the system closes its apps */
+/* Confirmed main-menu Quit (port/linux/game/menu_functions.c). */
 void platform_request_quit(void)
 {
-#ifndef HALO_ANDROID
+#ifdef HALO_ANDROID
+	/* The guest exit syscall reaches host_exit and closes the app process.
+	   Adapted from FernandolDev's OpenCE PR #183. */
+	exit(EXIT_SUCCESS);
+#else
 	SDL_Event event;
 
 	memset(&event, 0, sizeof(event));

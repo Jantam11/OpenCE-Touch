@@ -6259,10 +6259,6 @@ static void widget_instance_render_recursive(
 #endif
 	ui_mouse_note_target(widget, definition, offset);
 
-#ifdef HALO_ANDROID
-    /* Keep the original list position/focus target, replace its Quit artwork. */
-    if (ui_porting_is_quit(widget)) return;
-#endif
 	/* port: a Custom Edition map's picture, drawn over the whole widget, or
 	the unknown level's frame for a map without one
 	(port/linux/game/custom_edition_maps.c) */
@@ -6925,27 +6921,6 @@ static void widget_instance_process_one_event_recursive(
 	boolean widget_deleted = FALSE;
 
 #ifdef HALO_ANDROID
-    if (ui_porting_context == 1 && event->type == _event_type_button &&
-        event->data.button.value == 1) {
-        if (ui_porting_is_quit(widget) &&
-            (event->data.button.index == _gamepad_analog_button_a ||
-             event->data.button.index == _gamepad_binary_button_start)) {
-            host_porting_action(ui_porting_menu.revision, 1, 0);
-            *return_widget_deleted = FALSE;
-            return;
-        }
-        /* Android Back at the root must not open the obsolete Quit dialog. */
-        if (!widget->parent &&
-            (event->data.button.index == _widget_event_b_button ||
-             event->data.button.index == _widget_event_back_button)) {
-            char const *name = tag_get_name(widget->definition_tag_index);
-            if (name && (!strcmp(name, "pc\\main_menu\\main_menu") ||
-                !strcmp(name, "ui\\shell\\main_menu\\main_menu"))) {
-                *return_widget_deleted = FALSE;
-                return;
-            }
-        }
-    }
     if (!widget->parent && ui_porting_context && ui_porting_menu.page) {
         *return_widget_deleted = FALSE;
         if (event->type == _event_type_button && event->data.button.value == 1 &&

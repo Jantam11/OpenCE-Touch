@@ -45,6 +45,7 @@ env:
 
 jobs:
   linux:
+    if: github.ref != 'refs/heads/touch-controls'
     # Arch Linux has what the build needs as packages: clang 22 (for the
     # profile-guided optimisation in pgo/) and 32-bit SDL 3.
     runs-on: ubuntu-24.04
@@ -116,6 +117,7 @@ jobs:
         run: |
           python3 tools/test_android_touch.py
           python3 tools/test_android_mobile.py
+          python3 tools/test_android_render_quit.py
 
       - uses: actions/cache@v4
         with:
@@ -178,6 +180,7 @@ jobs:
           retention-days: 3
 
   windows:
+    if: github.ref != 'refs/heads/touch-controls'
     # The runner image has LLVM, Python and Visual Studio's x86 libraries and
     # Windows SDK.
     runs-on: windows-2025
@@ -254,7 +257,7 @@ jobs:
     # (every file keeps its name from release to release, for the README's
     # latest/download links); then all but the newest five build-* releases
     # go, tags and all. Only for main, and only when every platform built.
-    needs: [linux, android, windows]
+    needs: [android]
     if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -334,7 +337,7 @@ jobs:
           done
 
   touch_release:
-    needs: [linux, android, windows]
+    needs: [android]
     if: ${{ github.ref == 'refs/heads/touch-controls' && (inputs.publish_touch == true || startsWith(github.event.head_commit.message, 'Release OpenCE-Touch ')) }}
     permissions:
       contents: write
@@ -342,7 +345,7 @@ jobs:
     uses: ./.github/workflows/touch-release.yml
     with:
       build_run: ${{ format('{0}', github.run_id) }}
-      tag: v0.5.0-touch
+      tag: v0.5.1-touch
 
   notify:
     # A Discord embed for the run, to the DISCORD_WEBHOOK secret (nothing
@@ -350,7 +353,7 @@ jobs:
     # with each platform's result, this run's release (main only), and links
     # to the latest release's builds.
     needs: [linux, android, windows, release]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && github.ref != 'refs/heads/touch-controls' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

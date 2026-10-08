@@ -1,3 +1,13 @@
+# 0.5.1 Android visual/exit repair
+
+Baseline: `e4c22f8f` / v0.5.0-touch. User gameplay screenshots show stretched red wall polygons and missing floor/ceiling geometry in a10, plus a30 lifepod geometry artifacts. Diagnosis: the inherited Android renderer has the still-unmerged upstream #165 Mali buffer-copy race. The symptoms are consistent; no device logs or controlled upstream-versus-fork phone run are available to establish this as the only cause.
+
+Adapted kirklandsig's `343eef15ccc10e211059ebd1f9a26995b0904317` PR #165 change: track synchronized mirror uploads per 4 MiB segment and defer first-use unsynchronized writes until the three-frame fence ring passes the copy. The new regression compiles production mirror_refresh and models delayed GPU copies, including same-frame loads, adjacent pages, segment independence and unsigned frame rollover. Restoring the old condition must fail. Known upstream limits remain: host mapping failure silently falls back to subdata, and a timed-out fence can still proceed. No physical GPU behavior or performance is established by this model.
+
+Quit: commit `a97cd967` in this fork had replaced native Quit artwork/taps/controller actions with Porting options and suppressed root Back. Removed that interception and moved Porting options to the next row. All four PC-style native menu themes already provide Quit → confirmation → exit and Back cancellation. Adapted only the Android exit change from FernandolDev's PR #183 (`dc71f682`); did not add its optional debug-package feature. The existing guest exit reaches host_exit, which ends the app process. Pause-menu functions are unchanged.
+
+Checks: local Android touch and production mirror/exit regressions pass. The mobile suite's Java/configuration/gyro/import, single-player, relay and countdown checks passed locally; native JNI checks need headers absent on this host and will run in Android CI. Full Android debug/release builds and the complete mobile suite are required before automated publication. Desktop build jobs and Discord notifications are skipped on touch-controls. Version code 6, version name 0.5.1-touch; protocol remains 24.
+
 # 2026-10-08 integration
 
 The baseline was OpenCE-Touch `062566ac` (v0.4.0-touch). Upstream
