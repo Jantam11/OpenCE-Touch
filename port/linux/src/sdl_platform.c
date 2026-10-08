@@ -107,6 +107,11 @@ BOOL platform_sdl_initialize(void)
 	controller emulation in xinput_sdl.c) */
 	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
 #endif
+	if (platform_dedicated())
+	{
+		SDL_SetHint(SDL_HINT_AUDIO_DRIVER, "dummy");
+		SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "dummy");
+	}
 	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD | SDL_INIT_EVENTS))
 	{
 		platform_log("SDL_Init failed: %s", SDL_GetError());
@@ -1096,7 +1101,7 @@ void platform_show_message(const char *title, const char *message)
 {
 	platform_log("%s: %s", title, message);
 	/* (a run nobody watches: the log only) */
-	if (config_boolean("debug.hidden_window") || config_boolean("debug.null_renderer"))
+	if (platform_dedicated() || config_boolean("debug.hidden_window") || config_boolean("debug.null_renderer"))
 		return;
 	pthread_mutex_lock(&platform_message_lock);
 	snprintf(platform_message_title, sizeof(platform_message_title), "%s", title);
@@ -1181,6 +1186,13 @@ void platform_pump_events(void)
 	static BOOL looked_at_clipboard;
 	BOOL look_at_clipboard = !looked_at_clipboard;
 
+	if (!platform_window && platform_dedicated())
+	{
+		SDL_PumpEvents();
+		if (SDL_PeepEvents(&event, 1, SDL_GETEVENT, SDL_EVENT_QUIT, SDL_EVENT_QUIT) > 0)
+			exit(EXIT_SUCCESS);
+		return;
+	}
 	if (!platform_window || SDL_GetCurrentThreadID() != platform_event_thread)
 		return;
 	if (exit_ticks == (Uint64)-1)

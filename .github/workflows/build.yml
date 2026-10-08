@@ -75,6 +75,11 @@ jobs:
         run: |
           python -m pytest -q tools/test_linux_port.py tools/harness
           python tools/test_light_storage.py
+          python tools/test_sound_lifecycle.py
+          python tools/test_sound_transition.py
+          python tools/test_virtual_keyboard_input.py
+          python tools/test_dedicated_server.py
+          python tools/test_map_browser.py
 
       - name: Compile cache
         run: ccache --show-stats

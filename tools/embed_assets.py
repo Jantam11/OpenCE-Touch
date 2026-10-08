@@ -65,7 +65,11 @@ def menu_files() -> List[str]:
     """The menus' files menus.json lists, relative to their folder."""
     if not (ROOT / MENU_LIST).is_file():
         return []
-    return json.loads((ROOT / MENU_LIST).read_text())["files"]
+    files = json.loads((ROOT / MENU_LIST).read_text())["files"]
+    layers = sorted(path.relative_to(ROOT / MENU_ASSETS).as_posix()
+                    for folder in ("shell", "skin") for path in (ROOT / MENU_ASSETS / folder).rglob("*")
+                    if path.is_file() and path.suffix in (".xml", ".png") and "xbox" not in path.parts)
+    return sorted(set(files + layers))
 
 
 def smaa_files() -> List[tuple]:
@@ -78,7 +82,8 @@ def hud_asset_inputs() -> List[Path]:
     inputs = [listing for listing in (LAYOUT, TITLE_LIST, FONT_LIST, MENU_LIST) if (ROOT / listing).is_file()]
     return [*inputs, *(folder / f"{asset['name']}.png" for folder, asset, _ in textures()),
             *(FONT_ASSETS / name for name in font_files()), *(MENU_ASSETS / name for name in menu_files()),
-            *(SMAA_ASSETS / name for name, _ in smaa_files())]
+            *(SMAA_ASSETS / name for name, _ in smaa_files()),
+            *sorted(Path("port/linux/ui/fonts").glob("*.ttf"))]
 
 
 def hud_configure_inputs() -> List[Path]:
@@ -178,12 +183,24 @@ def main() -> None:
         index = files.index(font["file"])
         tag = font["tag"].replace("\\", "\\\\")
         size = (ROOT / FONT_ASSETS / font["file"]).stat().st_size
-        lines.append(f'\t{{ "{tag}", "{font["file"]}", font{index}, {size} }},')
+        theme = json.dumps(font["theme"]) if "theme" in font else "0"
+        lines.append(f'\t{{ "{tag}", "{font["file"]}", font{index}, {size}, {theme} }},')
     if not fonts:
         lines.append("\t{ 0 },")
     lines.append("};")
     lines.append(f"const unsigned int text_hires_embedded_count = {len(fonts)};")
     lines.append("")
+    # DamnationCE's overlay fonts are words too, so Android's guest converter
+    # carries them unchanged. The platform font unit reads these plain symbols.
+    ui_fonts = ["NotoSans-Regular.ttf", "NotoSans-Bold.ttf", "input_xbox.ttf", "input_playstation.ttf",
+                "input_nintendo.ttf", "input_keyboard.ttf", "Rajdhani-Medium.ttf", "Rajdhani-Bold.ttf",
+                "TitilliumWeb-SemiBold.ttf", "TitilliumWeb-Bold.ttf"]
+    for index, name in enumerate(ui_fonts):
+        lines.append(f"static const unsigned int ui_font{index}[] = {{")
+        lines.extend(words((ROOT / "port/linux/ui/fonts" / name).read_bytes()))
+        lines.append("};")
+    lines.append(f"const unsigned int *const ui_font_files[{len(ui_fonts)}] = {{" +
+                 ", ".join(f"ui_font{index}" for index in range(len(ui_fonts))) + "};")
     # the menus' files (menu_files.h)
     lines.append('#include "menu_files.h"')
     lines.append("")

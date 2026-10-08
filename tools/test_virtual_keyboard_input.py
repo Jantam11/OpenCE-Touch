@@ -9,10 +9,26 @@ import subprocess
 import tempfile
 import unittest
 
-if __package__:
-    from .test_custom_maps import c_block, function
-else:
-    from test_custom_maps import c_block, function
+import re
+
+def c_block(source, start):
+    # Ignore quoted text and comments while balancing a production C block.
+    tokens = re.finditer(r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|/\*.*?\*/|//[^\n]*|[{}]", source[start:], re.S)
+    depth = 0
+    for token in tokens:
+        if token[0] == '{':
+            depth += 1
+        elif token[0] == '}':
+            depth -= 1
+            if depth == 0:
+                return source[start:start + token.end()]
+    raise ValueError("Unclosed C block")
+
+def function(source, name):
+    match = re.search(r"^(?:static )?[\w *]+\b" + name + r"\(\s*[^;{]*\)\s*\{", source, re.M)
+    if not match:
+        raise ValueError("Function not found: " + name)
+    return c_block(source, match.start())
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -162,7 +178,7 @@ def fixture_source(keyboard=None, inputs=None):
 class VirtualKeyboardInputTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        compiler = shutil.which("clang")
+        compiler = shutil.which("clang") or shutil.which("gcc")
         if not compiler:
             raise unittest.SkipTest("clang is required for the production C fixture")
         cls.directory = tempfile.TemporaryDirectory(prefix="halo-keyboard-input-")

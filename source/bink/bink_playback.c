@@ -511,6 +511,8 @@ void bink_playback_start(
 	const char *full_pathname,
 	unsigned long flags)
 {
+	/* port: an unattended host has no screen for movies. */
+	{ extern int platform_dedicated(void); if (platform_dedicated()) return; }
 	bink_get_memory_available("begin bink_playback_start");
 
 	if (!bink_globals.initialized)

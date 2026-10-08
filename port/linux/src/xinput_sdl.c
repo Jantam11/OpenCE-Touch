@@ -958,3 +958,6 @@ DWORD WINAPI XInputDebugGetKeystroke(PXINPUT_DEBUG_KEYSTROKE keystroke)
 	}
 	return ERROR_HANDLE_EOF;
 }
+
+/* OpenCE uses Xbox gamepad actions for the keyboard and native touch pad too. */
+int platform_input_scheme(void) { return 1; }

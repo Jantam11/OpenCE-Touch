@@ -130,8 +130,8 @@ def main():
     parser.add_argument('--source',type=Path,default=ROOT/'source/sound/sound_manager.c')
     args=parser.parse_args()
     source=args.source.read_text()
-    compiler=[args.cc,'-std=gnu11','-O2','-fuse-ld=lld']
-    if sys.platform=='win32': compiler.append('--target=i686-pc-windows-msvc')
+    compiler=[args.cc,'-std=gnu11','-O2','-Wno-pointer-to-int-cast']
+    if sys.platform=='win32': compiler.extend(['--target=i686-pc-windows-msvc', '-fuse-ld=lld'])
     with tempfile.TemporaryDirectory(prefix='halo-transition-test-') as directory:
         unit=Path(directory)/'transition.c'; exe=Path(directory)/'transition.exe'
         unit.write_text(PRELUDE+function(source,'sound_set_definition_end')+function(source,'update_channel_for_looping_sound')+TESTS)

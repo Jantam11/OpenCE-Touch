@@ -2970,6 +2970,13 @@ boolean server_has_a_player_on_each_machine(
 				}
 			}
 
+			/* port: only the dedicated host may have no local player. */
+			{
+				extern boolean dedicated_server_active(void);
+				if (!has_a_player && dedicated_server_active() &&
+					network_game_server_client_machine_is_local(server, client_machine))
+					continue;
+			}
 			if (!has_a_player)
 				return FALSE;
 		}
@@ -4955,4 +4962,12 @@ boolean network_game_server_reset_to_pregame(
 	}
 
 	return success;
+}
+
+/* port: the unattended host uses the same ownership, readiness and precache
+checks as the existing server tools, never a timer-only force start. */
+void network_game_server_dedicated_start_countdown(struct network_game_server *server)
+{
+	if (server && !server->countdown_state.paused && !server->countdown_state.active)
+		network_game_server_port_force_start(server);
 }

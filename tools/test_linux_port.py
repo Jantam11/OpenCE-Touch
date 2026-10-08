@@ -199,7 +199,8 @@ MENU_INTEGER_ATTRIBUTES = {"auto_close", "auto_close_fade", "height", "index", "
                            "text_y", "top", "width", "x", "y"}
 
 
-def test_menus_are_well_formed():
+@pytest.mark.parametrize("theme", ("default", "glassed", "vanilla", "cairo"))
+def test_menus_are_well_formed(theme):
     """What port/linux/src/menu_files.c and port/linux/game/menu_tags.c check
     when the game loads them, but the map's own names (paths with backslashes),
     which only the map has."""
@@ -214,10 +215,19 @@ def test_menus_are_well_formed():
     functions |= set(c_strings(tags, "port_function_names[] =", "};"))
     inputs = set(c_strings(tags, "game_data_input_names[] =", "};"))
     inputs |= set(c_strings(tags, "port_game_data_input_names[] =", "};"))
-    listed = json.loads((MENUS / "menus.json").read_text())["files"]
-    files = sorted(MENUS.rglob("*.xml"))
-    assert sorted(path.relative_to(MENUS).as_posix() for path in files) == \
-        sorted(name for name in listed if name.endswith(".xml"))
+    from tools.embed_assets import menu_files
+    listed = menu_files()
+    assert len(listed) == len(set(listed))
+    assert {path.relative_to(MENUS).as_posix() for path in MENUS.rglob("*.xml")} == \
+        {name for name in listed if name.endswith(".xml")}
+    files = []
+    for name in listed:
+        if not name.endswith(".xml") or name.startswith("skin/"):
+            continue
+        if theme in ("default", "vanilla") and name.startswith("shell/"):
+            continue
+        layered = MENUS / "skin" / theme / name
+        files.append(layered if layered.is_file() else MENUS / name)
     widgets, bitmaps, strings, references, roots = {}, {}, {}, [], []
     for path in files:
         tree = ElementTree.parse(path)
@@ -245,8 +255,11 @@ def test_menus_are_well_formed():
                     if frame.get("map"):
                         assert "\\" in frame.get("map") and int(frame.get("index")) >= 0, where
                         continue
-                    assert frame.get("png") in listed, where
-                    with (MENUS / frame.get("png")).open("rb") as png:
+                    assert frame.get("png") in listed or f"skin/{theme}/{frame.get("png")}" in listed, where
+                    art = MENUS / "skin" / theme / frame.get("png")
+                    if not art.is_file():
+                        art = MENUS / frame.get("png")
+                    with art.open("rb") as png:
                         header = png.read(24)
                     width, height = int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big")
                     logical = int(frame.get("width")), int(frame.get("height"))

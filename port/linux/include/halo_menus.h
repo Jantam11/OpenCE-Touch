@@ -142,6 +142,22 @@ struct halo_menus
 
 /* the menus, read from the files (once; the same each call after); NULL if
 there are none, or a file has an error (logged) */
+enum halo_menu_theme
+{
+	HALO_MENU_THEME_GLASSED,
+	HALO_MENU_THEME_VANILLA,
+	HALO_MENU_THEME_CAIRO,
+	HALO_MENU_THEME_DEFAULT,
+	NUMBER_OF_HALO_MENU_THEMES
+};
+
+/* Theme chosen on first load; changes apply after restarting. Unknown names
+use Default, which preserves the original OpenCE menus. */
+enum halo_menu_theme halo_menus_theme(void);
+/* a theme's name, as display.theme and its layer's folder have it ("glassed") */
+char const *halo_menus_theme_name(enum halo_menu_theme theme);
+
+
 struct halo_menus const *halo_menus_load(void);
 /* text as UTF-16, its terminator included, "\n" written as the game's line
 breaks ("\r\n"): the number of characters written (at most capacity) */

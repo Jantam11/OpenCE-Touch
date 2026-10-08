@@ -20,6 +20,16 @@ Open **OPTIONS** or the native **Porting options** menu to change settings. Layo
 
 **Disc videos:** new installations extract `bink/` alongside `maps/`. Existing players can select **OPTIONS → Import disc movies** and choose their own Halo `.iso`/`.xiso`; this copies movies without replacing maps or profiles. Intro, credits and idle attract-demo videos play with audio, and a tap skips playback. No game videos are bundled in the APK. Other in-engine cutscenes still use the game's renderer.
 
+## Fork features added on 2026-10-08
+
+- [ChupathingyCE](https://github.com/ChupathingyCE/chupathingyce): persistent shader warm-up/cache, sound lifetime and stream-underrun fixes, less profile/map I/O in menus, profile keyboard Enter handoff, profile-name reuse, paused multiplayer input/crouch fixes, finer mouse sensitivity and independent Sinc/Linear audio resampling. Desktop [playlist server tools](server/README.md) add unattended hosting, map/game-type rotation and idle/empty-game recovery using OpenCE networking.
+- [DamnationCE](https://github.com/xshxdex98/DamnationCE): a map picker with stock/custom categories, pictures, list/grid views, co-op selection and difficulty. Optional **Glassed**, **Cairo** (Halo 2 inspired) and **Vanilla** menu themes. **Default remains selected**; choose another in **Settings → Video Setup → Menu Theme**, save, then restart. Themes also have a Menus selector. `display.map_browser=false` restores the original map list.
+- [fqlx/OpenCE](https://github.com/fqlx/OpenCE): an optional compact touchscreen preset adapted from its browser controls to our Android virtual gamepad. Choose **OPTIONS → Layout presets → fqlx compact**. Export your current layout first if you want to keep it. Preset controls remain editable and use the existing `.halolayout` export/import format; your current layout is not changed by upgrading.
+
+The original touch/gyro/rumble, single-player options, layout import/export and disc-movie features remain in place. The shader cache is stored with saves (up to 48 MiB); deleting `shader_cache.bin` clears it. Audio defaults to Sinc; Linear is an optional lower-cost resampler. The server tools do not add Delta online accounts/statistics. No community map pack or downloader is bundled.
+
+See [integration notes](INTEGRATION_NOTES.md) for source revisions, validation and the community-map proposal. Font notices ship in the packaged builds and Android assets. These changes need phone gameplay and live-server checks with your own game files before a release is considered verified on hardware.
+
 [![Join our Discord](https://invidget.switchblade.xyz/9gqcHyr5km)](https://discord.gg/9gqcHyr5km)
 
 This project is a port of the Halo: Combat Evolved decompilation to Linux,

@@ -451,7 +451,7 @@ public final class TouchControls extends View implements android.hardware.Sensor
     }
     public void options() {
         releaseAll();
-        String[] choices = {"Aim sensitivity", "Add button", "Reset layout", "Help", "General settings", "Export layout", "Import layout", "Single-player cheats", "Import disc movies", "Camera mode"};
+        String[] choices = {"Aim sensitivity", "Add button", "Reset layout", "Help", "General settings", "Export layout", "Import layout", "Single-player cheats", "Import disc movies", "Camera mode", "Layout presets"};
         new AlertDialog.Builder(activity).setTitle("Touch controls").setItems(choices,(d,which)->{
             if (which == 0) {
                 LinearLayout layout = dialogLayout();
@@ -479,7 +479,28 @@ public final class TouchControls extends View implements android.hardware.Sensor
                 android.content.Intent intent = new android.content.Intent(activity, LauncherActivity.class);
                 intent.putExtra("import-movies", true); activity.startActivity(intent);
             } else if (which == 9) nativeCameraMode();
+            else if (which == 10) layoutPresets();
         }).show();
+    }
+    private void layoutPresets() {
+        new AlertDialog.Builder(activity).setTitle("Layout presets")
+            .setItems(new String[]{"OpenCE-Touch default", "fqlx compact"}, (dialog, selected) ->
+                new AlertDialog.Builder(activity)
+                    .setMessage("Replace the current button layout? Export it first to keep a copy. Your general settings stay the same.")
+                    .setPositiveButton("Apply", (confirmation, button) -> {
+                        releaseAll();
+                        if (selected == 0) defaults();
+                        else {
+                            controls.clear();
+                            for (TouchConfiguration.Button b : TouchConfiguration.compactLayout().buttons) {
+                                Control c = new Control(b.id, b.label, b.kind, b.action, b.x, b.y, b.radius);
+                                c.opacity = b.opacity; controls.add(c);
+                            }
+                        }
+                        settings.overlayDisabled = false;
+                        for (Control c : controls) bound(c);
+                        save(); saveFeatures(); invalidate();
+                    }).setNegativeButton("Cancel", null).show()).show();
     }
     // Mobile features adapted from theLlamaNet / FulGer. SDL virtual input stays in TouchInput.
     private final TouchConfiguration settings = new TouchConfiguration();
@@ -617,4 +638,3 @@ public final class TouchControls extends View implements android.hardware.Sensor
         for(Control control:controls)bound(control); save();saveFeatures();
     }
 }
-

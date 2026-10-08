@@ -2487,6 +2487,8 @@ static boolean map_list_initialize(struct widget_instance *list)
 	}
 	map_kind_set(list, map_list.kind);
 	map_step_open(list, MAP_STEP_MAPS, last_used);
+	/* port: map picker uses the same create/select-map entry point. */
+	{ extern boolean map_screen_open(void); map_screen_open(); }
 	return TRUE;
 }
 
@@ -5263,6 +5265,20 @@ boolean pc_menu_event_function_invoke(
 		else if (!strcmp(name, "join controller to mp game"))
 		{
 			return multiplayer_host(widget, event, controller, widget_deleted);
+		}
+		else if (!strcmp(name, "port map select"))
+		{
+			extern boolean map_screen_open(void);
+			return map_screen_open();
+		}
+		else if (!strncmp(name, "port theme ", 11))
+		{
+			extern void platform_show_message(char const *, char const *);
+			char value[32];
+			snprintf(value, sizeof(value), "\"%s\"", name + 11);
+			if (!config_write("display.theme", value)) return FALSE;
+			platform_show_message("Menu theme", "Theme saved. Restart the game to apply it.");
+			return TRUE;
 		}
 		else if (!strcmp(name, "mp level list initialize"))
 		{

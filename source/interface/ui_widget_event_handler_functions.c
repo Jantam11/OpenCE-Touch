@@ -6235,3 +6235,20 @@ boolean ui_widget_port_gametype_save(
 	return player_ui_save_profile();
 }
 
+
+/* port: DamnationCE's browser uses names, with the current CE map list. */
+char **ui_widget_port_multiplayer_levels(short *count, short *xbox_count)
+{
+	*xbox_count = 13;
+	custom_edition_maps_look_again();
+	return custom_edition_maps_level_list(event_handler_functions.multiplayer_levels, 13, count);
+}
+boolean ui_widget_port_multiplayer_level_choose(char const *name)
+{
+	char const *const *names;
+	short count = ui_widget_port_multiplayer_maps(&names, NULL), index;
+	for (index = 0; index < count; index++)
+		if (!_stricmp(name, names[index]))
+			return ui_widget_port_multiplayer_map_choose(index);
+	return FALSE;
+}

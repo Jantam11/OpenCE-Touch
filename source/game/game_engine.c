@@ -968,6 +968,21 @@ long game_engine_get_team_score(
 	return 0;
 }
 
+long game_engine_total_score(
+	void)
+{
+	struct data_iterator iterator;
+	long total = 0;
+
+	if (!game_engine || !game_engine->get_player_score)
+		return 0;
+	data_iterator_new(&iterator, player_data);
+	while (data_iterator_next(&iterator))
+		total += game_engine->get_player_score(iterator.datum_index, FALSE);
+
+	return total;
+}
+
 real linear_to_non_linear_alpha(
 	real linear_alpha)
 {

@@ -41,6 +41,17 @@ public class MobileCheck {
   require(imported.buttons.get(0).kind==1&&imported.buttons.get(0).x==.5f&&imported.buttons.get(1).action==1016&&imported.buttons.get(2).action==2000);
   require(imported.buttons.size()==4&&imported.buttons.get(3).kind==2);
   require(TouchConfiguration.decode(imported.encode()).buttons.get(3).kind==2);
+  TouchConfiguration compact=TouchConfiguration.compactLayout();
+  TouchConfiguration compactAgain=TouchConfiguration.decode(compact.encode());
+  require(compactAgain.buttons.size()==14);
+  java.util.HashSet<Integer> compactActions=new java.util.HashSet<>();
+  int movePads=0,aimPads=0;
+  for(int i=0;i<compact.buttons.size();i++) {
+   TouchConfiguration.Button a=compact.buttons.get(i), b=compactAgain.buttons.get(i);
+   require(a.id.equals(b.id)&&a.action==b.action&&a.kind==b.kind&&a.x==b.x&&a.y==b.y&&a.radius==b.radius&&a.opacity==b.opacity);
+   compactActions.add(b.action);if(b.kind==1)movePads++;if(b.kind==2)aimPads++;
+  }
+  require(movePads==1&&aimPads==1&&compactActions.containsAll(java.util.Arrays.asList(1000,1001,1002,1003,1004,1006,1007,1008,1009,1010,1015,1016)));
   rejects("format=halo-touch-layout\nversion=4\ncount=2\ncontrol.0.type=16\ncontrol.1.type=16\n");
   rejects("format=halo-touch-layout\nversion=4\ncount=1\ncontrol.0.type=0\ncontrol.0.visible=false\n");
   GyroscopeAim gyro=new GyroscopeAim(); float[] delta=new float[2];

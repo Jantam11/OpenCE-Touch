@@ -17,6 +17,33 @@ final class TouchConfiguration {
     float sensitivity = 1.8f, gyroSensitivity = 1f, fov = 70f;
     boolean gyro, rumble = true, fps, icons = true, overlayDisabled;
 
+    /** fqlx's compact web layout, adapted to our native SDL virtual gamepad. */
+    static TouchConfiguration compactLayout() {
+        TouchConfiguration c = new TouchConfiguration();
+        c.control("move", "MOVE", 1, 0, .14f, .76f, .13f);
+        c.control("aim", "AIM", 2, 0, .66f, .62f, .20f);
+        c.control("fire", "FIRE", 0, 1016, .88f, .53f, .085f);
+        c.control("jump", "JUMP", 0, 1000, .92f, .77f, .065f);
+        c.control("melee", "MELEE", 0, 1001, .81f, .85f, .06f);
+        c.control("reload", "RELOAD", 0, 1002, .77f, .67f, .06f);
+        c.control("swap", "SWAP", 0, 1003, .89f, .23f, .055f);
+        c.control("grenade", "GRENADE", 0, 1015, .32f, .75f, .06f);
+        c.control("grenadeType", "GREN TYPE", 0, 1010, .32f, .90f, .05f);
+        c.control("crouch", "CROUCH", 0, 1007, .15f, .47f, .05f);
+        c.control("zoom", "ZOOM", 0, 1008, .70f, .42f, .05f);
+        // Keep native features reachable without depending on a browser HUD.
+        c.control("light", "LIGHT", 0, 1009, .07f, .23f, .05f);
+        c.control("pause", "PAUSE", 0, 1006, .56f, .23f, .05f);
+        c.control("score", "SCORE", 0, 1004, .43f, .23f, .05f);
+        return c;
+    }
+
+    private void control(String id, String label, int kind, int action, float x, float y, float radius) {
+        Button b = new Button(); b.id = id; b.label = label; b.kind = kind; b.action = action;
+        b.x = x; b.y = y; b.radius = radius; b.opacity = kind == 2 ? .3f : .45f;
+        buttons.add(b);
+    }
+
     private static float number(Properties p, String key, float fallback, float low, float high) {
         float n = Float.parseFloat(p.getProperty(key, Float.toString(fallback)));
         if (!Float.isFinite(n) || n < low || n > high) throw new IllegalArgumentException("Invalid " + key);

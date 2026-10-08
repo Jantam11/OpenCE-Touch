@@ -32,8 +32,9 @@ SCREENS = {
         "header": ("header_profile_video_settings", f"{PE}/video_settings/header_profile_video_settings"),
         # (closer than the other screens' rows, and the help lower, for all
         # twelve places to fit above it)
-        "spacing": 24,
-        "help_top": 364,
+        "spacing": 22,
+        "help_top": 371,
+        "help_height": 40,
         # (rows in the place of the row before them: Window Size in
         # Resolution's, port/linux/game/menu_functions.c showing the one the
         # display mode chosen uses; Android's anti-aliasing in the desktop's)
@@ -53,6 +54,8 @@ SCREENS = {
              "The window's size: 4:3, then 16:10, 16:9 and 21:9\n(its edges can also be dragged).", "desktop"),
             ("RESOLUTION SCALING:", "display.resolution_scaling", [("NATIVE", "native"), ("ORIGINAL", "original")],
              "Native draws at the resolution; Original draws\nthe Xbox's 640x480 and scales it up.", "desktop"),
+            ("MENU THEME:", "display.theme", [("DEFAULT", "default"), ("GLASSED", "glassed"), ("VANILLA", "vanilla"), ("CAIRO", "cairo")],
+             "Optional menu appearance. Restart the game to apply.\nDefault keeps the OpenCE menus.", None),
             ("V-SYNC:", "display.vsync", ON_OFF,
              "Wait for the display between frames, so that the\npicture never tears.", None),
             ("FRAME RATE LIMIT:", "display.max_fps",
@@ -108,6 +111,8 @@ SCREENS = {
             ("MUSIC VOLUME:", "audio.music_volume", VOLUMES, "The music's volume.", None),
             ("EFFECTS VOLUME:", "audio.effects_volume", VOLUMES,
              "The volume of every other sound: effects and\nspeech.", None),
+            ("RESAMPLING:", "audio.resampling", [("SINC", "sinc"), ("LINEAR", "linear")],
+             "Sinc preserves the original sound band. Linear\nuses the older interpolation. Reverb is separate.", None),
             ("REVERB:", "audio.reverb", ON_OFF,
              "Echo sounds as the place you are in does, and\nmuffle those behind walls, as the Xbox did.", None),
             ("SOUND:", "audio.enabled", ON_OFF,
@@ -221,7 +226,7 @@ def _screen(folder: str, spec: dict, rows: list, list_inputs: list, list_handler
                                           ("bitmap", header_bitmap)], [])
     lines += _widget(f"{base}/help", [("type", "text"), ("controller", 1), ("left", 68),
                                       ("top", spec.get("help_top", 350)), ("width", 482),
-                                      ("height", 60), ("string_list", f"{base}/help_strings"),
+                                      ("height", spec.get("help_height", 60)), ("string_list", f"{base}/help_strings"),
                                       ("font", "ui\\large_ui"), ("color", "#FFFFFFFF")], [])
     children = [f'<data input="{name}"/>' for name in list_inputs] + list_handlers
     # (each row: its widget, platform, and the place it is in, else the next)

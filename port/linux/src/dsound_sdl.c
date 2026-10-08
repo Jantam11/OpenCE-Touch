@@ -1254,7 +1254,7 @@ static void audio_start(void)
 	resampler_phases_initialize();
 	reverb_initialize();
 
-	if (config_boolean("audio.enabled") && platform_sdl_initialize())
+	if (!platform_dedicated() && config_boolean("audio.enabled") && platform_sdl_initialize())
 	{
 		spec.format = SDL_AUDIO_F32;
 		spec.channels = OUTPUT_CHANNELS;

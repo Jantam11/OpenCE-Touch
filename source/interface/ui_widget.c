@@ -2896,11 +2896,15 @@ boolean widget_event_function_list_widget_goto_previous_item(
 	return TRUE;
 }
 
+void map_screen_close(void);
+
 void ui_widgets_close_all(
 	void)
 {
 	long local_player_index;
 
+	/* The overlay must not outlive the menu tags or its list instance. */
+	map_screen_close();
 	/* port: the virtual keyboard goes with the widgets (while the widget
 	whose text it edits is still there): left open, it drew on after a game
 	loaded, with the menu map's font, which the game's tags no longer have
@@ -6025,6 +6029,12 @@ void ui_widget_port_post_button(
 	return;
 }
 
+/* port: DamnationCE map picker; shares the existing pointer and pad input. */
+boolean map_screen_active(void);
+void map_screen_process(void);
+void map_screen_render(void);
+void map_screen_pointer(struct halo_ui_pointer const *pointer);
+
 static void ui_widgets_process_mouse(
 	void)
 {
@@ -6046,6 +6056,11 @@ static void ui_widgets_process_mouse(
 		pointer_active = 0;
 	}
 
+	if (pointer_active && map_screen_active())
+	{
+		map_screen_pointer(&pointer);
+		pointer_active = 0;
+	}
 	if (!pointer_active ||
 		virtual_keyboard_active())
 
@@ -6534,6 +6549,11 @@ void render_ui_widgets(
 		local_player_index == NONE ? 0 : local_player_index;
 	if (bink_playback_ui_rendering_inhibited())
 		return;
+	if (map_screen_active())
+	{
+		map_screen_render();
+		return;
+	}
 	if (!virtual_keyboard_active())
 	{
 		local_player_index = PIN(
@@ -7665,6 +7685,11 @@ void process_ui_widgets(
 		widget_globals.initialized);
 	widget_globals.current_system_milliseconds = system_milliseconds();
 	ui_widgets_process_mouse();
+	if (map_screen_active())
+	{
+		map_screen_process();
+		return;
+	}
 	if (ui_widget_port_press_controller != NONE)
 	{
 		event_manager_post_button(ui_widget_port_press_controller, ui_widget_port_press_button);
@@ -7856,3 +7881,17 @@ void process_ui_widgets(
 
 	return;
 }
+
+/* port: the map picker uses the same menu stack as native list selection. */
+boolean ui_widget_port_open_from_top(char const *name)
+{
+	struct widget_instance *top = widget_globals.active_widgets[0];
+	return ui_widget_load_by_name_or_tag(name, NONE, NULL, 0,
+		top ? widget_instance_get_topmost_parent(top)->definition_tag_index : NONE, NONE, NONE) != NULL;
+}
+void ui_widget_port_go_back_from_top(void)
+{
+	if (widget_globals.active_widgets[0])
+		widget_instance_go_back_to_previous(widget_globals.active_widgets[0]);
+}
+struct widget_instance *ui_widget_port_top(void) { return widget_globals.active_widgets[0]; }

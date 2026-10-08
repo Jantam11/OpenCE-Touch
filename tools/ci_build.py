@@ -109,7 +109,10 @@ def main() -> int:
     shutil.copy2(ROOT / "port/third_party/miniupnpc/LICENSE", dist / "miniupnpc-LICENSE.txt")
     # the text's fonts (port/assets/fonts), embedded in every build, whose
     # SIL Open Font License asks each copy to carry it
-    shutil.copy2(ROOT / "port/assets/fonts/Overpass-OFL.txt", dist / "Overpass-OFL.txt")
+    for license in ("Overpass-OFL.txt", "Rajdhani-OFL.txt", "TitilliumWeb-OFL.txt"):
+        shutil.copy2(ROOT / "port/assets/fonts" / license, dist / license)
+    for license in ("OFL.txt", "KENNEY-CC0.txt"):
+        shutil.copy2(ROOT / "port/linux/ui/fonts" / license, dist / ("ui-font-" + license))
     # the menus' XML parser (port/third_party/expat), in every build, whose
     # MIT license asks copies to carry its notice
     shutil.copy2(ROOT / "port/third_party/expat/COPYING", dist / "expat-COPYING.txt")

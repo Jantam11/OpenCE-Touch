@@ -37,6 +37,7 @@ PRELUDE = r'''
 typedef float real;
 typedef int boolean;
 #define NONE (-1)
+#define NUMBEROF(a) (sizeof(a) / sizeof((a)[0]))
 #define TRUE 1
 #define FALSE 0
 #define MAX(a,b) ((a)>(b)?(a):(b))
@@ -273,9 +274,9 @@ def main():
     parser.add_argument("--backend-source", type=Path, default=ROOT / "source/sound/sound_dsound_xbox.c")
     args = parser.parse_args()
     source = args.source.read_text(encoding="utf-8")
-    compiler = [args.cc, "-std=c11", "-O2", "-fuse-ld=lld", "-Wno-void-pointer-to-int-cast"]
+    compiler = [args.cc, "-std=c11", "-O2", "-Wno-void-pointer-to-int-cast"]
     if sys.platform == "win32":
-        compiler.append("--target=i686-pc-windows-msvc")
+        compiler.extend(["--target=i686-pc-windows-msvc", "-fuse-ld=lld"])
     names = ["sound_calculate_fade", "sound_start_fade"]
     if re.search(r"static void sound_fade_looping_track_components\(", source):
         names.append("sound_fade_looping_track_components")
@@ -285,12 +286,12 @@ def main():
         unit = path / "sound_lifecycle.c"
         executable = path / "sound_lifecycle.exe"
         unit.write_text(PRELUDE + "\n".join(function(source, name) for name in names) + TESTS, encoding="utf-8")
-        subprocess.run([*compiler, str(unit), "-o", str(executable)], check=True)
+        subprocess.run([*compiler, str(unit), "-o", str(executable), *([] if sys.platform == "win32" else ["-lm"])], check=True)
         subprocess.run([str(executable)], check=True)
         backend = args.backend_source.read_text(encoding="utf-8")
         unit.write_text(BACKEND_PRELUDE + function(backend, "dsound_channel_callback") +
                         function(backend, "channel_stop") + BACKEND_TESTS, encoding="utf-8")
-        subprocess.run([*compiler, str(unit), "-o", str(executable)], check=True)
+        subprocess.run([*compiler, str(unit), "-o", str(executable), *([] if sys.platform == "win32" else ["-lm"])], check=True)
         subprocess.run([str(executable)], check=True)
 
 

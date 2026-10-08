@@ -243,9 +243,18 @@ static BOOL file_read(void)
 	FILE *file = fopen(cache.path, "rb");
 	char header[8];
 	BOOL whole = TRUE;
+	long size;
 
 	if (!file)
 		return TRUE;
+	/* Bound input as well as output: a stale or externally replaced cache
+	may never grow the warm-up allocations without limit. */
+	if (fseek(file, 0, SEEK_END) || (size = ftell(file)) < 0 ||
+		(unsigned long)size > SHADER_CACHE_MAXIMUM_BYTES || fseek(file, 0, SEEK_SET))
+	{
+		fclose(file);
+		return FALSE;
+	}
 	if (fread(header, 1, 8, file) != 8 || memcmp(header, SHADER_CACHE_HEADER, 8))
 	{
 		fclose(file);
