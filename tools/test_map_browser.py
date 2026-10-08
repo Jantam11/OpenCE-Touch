@@ -57,7 +57,7 @@ int main(void) {
  pick();assert(map_screen.step==STEP_KINDS); /* opening press cannot also select */
  now+=OPEN_SETTLE;pick();assert(map_screen.step==STEP_COOPERATIVE_MODES);
  pick();pick();assert(map_screen.step==STEP_CAMPAIGN_LEVELS&&map_screen.count==2);
- valid=0;pick();assert(map_screen.active&&!opened);valid=1;pick();assert(!map_screen.active&&opened==1&&difficulty_seen==1);
+ valid=0;pick();assert(map_screen.active&&!opened&&cooperative==1);valid=1;pick();assert(!map_screen.active&&opened==1&&difficulty_seen==1&&cooperative==2);
  assert(map_screen_open());now+=OPEN_SETTLE;map_screen.kind_selected=1;pick();assert(map_screen.step==STEP_CATEGORIES);
  assert(category_levels(0,entries)==3&&category_levels(1,entries)==1);
  map_screen.category_selected=1;pick();assert(map_screen.count==1&&map_screen.entries[0].level==3);
