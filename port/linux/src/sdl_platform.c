@@ -1186,6 +1186,9 @@ void platform_pump_events(void)
 	static BOOL looked_at_clipboard;
 	BOOL look_at_clipboard = !looked_at_clipboard;
 
+#ifndef HALO_ANDROID
+	/* The unattended director is desktop-only; these SDL APIs have no
+	guest ABI bridge and must not be referenced by Android. */
 	if (!platform_window && platform_dedicated())
 	{
 		SDL_PumpEvents();
@@ -1193,6 +1196,7 @@ void platform_pump_events(void)
 			exit(EXIT_SUCCESS);
 		return;
 	}
+#endif
 	if (!platform_window || SDL_GetCurrentThreadID() != platform_event_thread)
 		return;
 	if (exit_ticks == (Uint64)-1)
