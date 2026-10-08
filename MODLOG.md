@@ -35,3 +35,24 @@ Local actual-production regressions pass for fast taps/cancel/controller ports/m
 Completed validation: release source c40f59833f45d9cb130970d5f91f5cc1ad1dfd51 (tree 8cbfc4d12cf797c36f44191154b178d35f9b046f) passed Android, Linux and Windows debug/release builds in run 37638620788. Android ran the original touch/profile regressions and expanded mobile/server/relay tests; Linux port tests reported 11 passed and 4 skipped. Fixed remaining menu text-scaling calls for current upstream, provided an aim pad for imported layouts and tested removal of panel-owned campaign cheat flags before hosted or joined multiplayer.
 
 Published v0.4.0-touch with OpenCE-Touch.apk, packaged Android build and SHA256SUMS.txt. Independently verified the artifact digest, APK ZIP integrity, arm64 native decoder/JNI entry points, guest ELF, absence of bundled maps/videos, dependency licenses and exact FFmpeg source/relink archive. APK SHA256: 10cfddd9b7e2f8cbaedece53ecf5802bfda5713a3cfc31a57e7ead9a9261fb9a. README and release credit theLlamaNet/FulGer, JoshRob297 and FFmpeg and retain AI disclosure. Real-phone gameplay, gyro/rumble, video/audio and Internet relay remain unverified; temporary CI signing can prevent updates over an older APK, so back up profiles/saves before uninstalling.
+
+
+## 2026-10-08 upstream update
+
+Baseline: touch-controls 062566acd90461f35687006ac55610e17f23d615 (0.4.0-touch).
+Selected upstream: 2d2348cd7db935cd11024e160241fc8315e13447, 88 new commits; Linux, Windows and Android debug/release jobs all passed in upstream run 37756123632.
+
+Resolved the Android third-party cache conflict by tracking both Bink build inputs and the SDL relative-mouse patch. Resolved server countdown conflict by keeping upstream's solo-host/team/minimum-player behavior together with fork countdown diagnostics, rotation and precache guards. Removed the superseded local-machine helper. Added production-code regressions for solo hosting, team readiness, minimum players, unowned machines, precache and dedicated-server state.
+
+Existing Android Java controls/layout/gyro/settings/movie code, host touch/mobile/movie bridge, decoder, virtual-gamepad implementation, MQTT relay, profile-keyboard handling, cheats and rumble files remain unchanged from the 0.4.0 baseline. Upstream moves the network protocol from 22 to 24; multiplayer peers need a compatible build.
+
+Local touch and expanded mobile regressions passed with the existing project JDK. Upstream asset-free harness and full merged-source Linux/Windows/Android CI validation pending. No connected phone, emulator or game data, so no new gameplay/audio/video/Internet/gyro/rumble validation is claimed.
+
+Popular forks are being reviewed separately. No new third-party fork feature is part of this upstream merge. No release is requested by this task.
+
+
+Completion checkpoint: local merged-source touch and mobile checks passed; Linux tooling pytest: 8 passed, 7 skipped (no clang/32-bit compiler environment). Native light-storage and upstream harness execution are blocked by the missing clang/lld/32-bit libc toolchain. These are environment failures, not established source failures.
+
+Remote publication is blocked: git push has no authenticated credentials; GitHub create_blob returns 403 Resource not accessible by integration. The connected login is Jantam11, but list_installations, list_installed_accounts and owner-filtered list_repositories return empty. No branch, PR, remote commit or release was created; touch-controls remains 062566ac. GitHub plugin is installed. The account connection needs repository write access, or explicit permission for signed-in browser fallback, before publishing a staging branch, running full CI and updating touch-controls. Browser fallback has not been initialized.
+
+Fork review: retrieved the top 100 direct forks ranked by stars, examined the top 12, plus JoshRob297/halo-ce-touch, RadlikesBurgs/halo-vulkan and astromaddie/HaloCE-VR. Leading candidates: ChupathingyCE shader warm-up/cache, plasma-pistol loop lifetime repair, menu/profile I/O reduction, profile-keyboard Enter handoff, audio quality option and dedicated-server tooling; DamnationCE map picker/themes and selected CE/co-op behavior; thelinkin3000 optional Android Vulkan/Turnip backend and relocatable memory window. Existing Llama and Josh features are already integrated. Platforms/VR/browser features are expansion projects. No new fork feature was imported. Evidence and comparative JSON are in /workspace/scratch/e518e782cfe5/fork-review; current branch update-touch-20261008 in /workspace/scratch/e518e782cfe5/OpenCE-Touch.

@@ -231,11 +231,71 @@ int main(void){
     print("Server rotation and MQTT 3/5 relay packet bounds checks passed.")
 
 
+def test_server_countdown(folder):
+    source = (ROOT / "source/networking/network_server_manager.c").read_text()
+    start = source.index("boolean server_has_enough_machines(")
+    end = source.index("void network_game_server_invalidate_network_machine(", start)
+    force_start = source.index("boolean network_game_server_port_force_start(")
+    force_end = source.index("void network_game_server_port_log_state(", force_start)
+    program = r'''#include <assert.h>
+#include <stdarg.h>
+typedef int boolean;
+#define FALSE 0
+#define TRUE 1
+#define MAXIMUM_NETWORK_MACHINE_COUNT 4
+#define _network_game_server_state_pregame 0
+struct network_game_server_client_machine { int joined; };
+struct network_game_server {
+ struct { long player_count, minimum_players; } game;
+ struct { int paused; } countdown_state;
+ struct network_game_server_client_machine client_machines[4];
+ int state;
+};
+static int players_on_each = 1, needs_teams, precached, starts;
+static int network_game_server_client_machine_is_joined_to_game(struct network_game_server *s, struct network_game_server_client_machine *m) {(void)s;return m->joined;}
+static int server_has_a_player_on_each_machine(struct network_game_server *s) {(void)s;return players_on_each;}
+static int server_needs_more_teams(struct network_game_server *s) {(void)s;return needs_teams;}
+static int network_game_server_have_all_machines_have_precached(struct network_game_server *s) {(void)s;return precached;}
+static int network_game_server_start_network_game(struct network_game_server *s) {(void)s;starts++;return 1;}
+static void network_event(const char *fmt, ...) {(void)fmt;}
+''' + source[start:end] + source[force_start:force_end] + r'''
+int main(void) {
+ struct network_game_server s = {0};
+ s.game.minimum_players = 2;
+ assert(!server_ok_to_countdown(&s));
+ s.client_machines[0].joined = 1; s.game.player_count = 1; needs_teams = 1;
+ assert(server_ok_to_countdown(&s)); /* upstream permits a solo host */
+ assert(!network_game_server_port_force_start(&s) && !starts);
+ precached = 1;
+ assert(network_game_server_port_force_start(&s) && starts == 1);
+ players_on_each = 0;
+ assert(!server_ok_to_countdown(&s));
+ assert(!network_game_server_port_force_start(&s) && starts == 1);
+ players_on_each = 1; s.game.player_count = 2;
+ assert(!server_ok_to_countdown(&s)); /* multiple players still need teams */
+ needs_teams = 0; s.game.minimum_players = 3;
+ assert(!server_ok_to_countdown(&s));
+ s.game.minimum_players = 2;
+ assert(server_ok_to_countdown(&s));
+ s.state = 1;
+ assert(!network_game_server_port_force_start(&s));
+ assert(!network_game_server_port_force_start(0));
+ return 0;
+}
+'''
+    (folder / "countdown.c").write_text(program)
+    subprocess.run(["cc", "-std=c99", "-Wall", "-Wextra", "-Werror",
+                    str(folder / "countdown.c"), "-o", str(folder / "countdown")], check=True)
+    subprocess.run([str(folder / "countdown")], check=True)
+    print("Solo-host countdown, team readiness and dedicated-server precache checks passed.")
+
+
 def main():
     with tempfile.TemporaryDirectory() as directory:
         folder = Path(directory)
         test_singleplayer_cheats(folder)
         test_network_helpers(folder)
+        test_server_countdown(folder)
         (folder / "MobileCheck.java").write_text(JAVA_TEST)
         javac = ["javac"] if shutil.which("javac") else ["java", "-m", "jdk.compiler/com.sun.tools.javac.Main"]
         subprocess.run([*javac,"-d",str(folder),*[str(JAVA / (name+".java")) for name in
