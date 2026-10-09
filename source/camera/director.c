@@ -297,6 +297,15 @@ boolean director_inhibited_input(
 	return director_get(local_player_index)->inhibited_input;
 }
 
+/* Whether direct mouse/touch look belongs to the flying camera. The player
+   polls before director_update, so inhibition alone cannot protect the delta. */
+boolean director_flying_controls_active(short local_player_index)
+{
+	struct director *director = director_get(local_player_index);
+	return director->camera_proc == (director_camera_update_proc)flying_camera_update &&
+		director->debug_controls;
+}
+
 director_perspective director_get_perspective(
 	short local_player_index)
 {
@@ -813,6 +822,11 @@ static boolean director_update_controls(
 		unsigned long control_flags;
 		struct gamepad_state const *gamepad =
 			input_get_gamepad_state((short)player_index);
+		/* A 30 Hz input snapshot can be reused by several render frames. */
+		static boolean zoom_down[MAXIMUM_NUMBER_OF_LOCAL_PLAYERS];
+		boolean down = gamepad->buttons[_gamepad_binary_button_right_thumb] != 0;
+		boolean zoom_pressed = down && !zoom_down[local_player_index];
+		zoom_down[local_player_index] = down;
 
 		if (director_camera_switch_fast)
 		{
@@ -837,7 +851,7 @@ static boolean director_update_controls(
 			director->camera_proc !=
 				(director_camera_update_proc)following_camera_update)
 		{
-			if (gamepad->buttons[_gamepad_binary_button_right_thumb] == 1)
+			if (zoom_pressed)
 				director->debug_controls = !director->debug_controls;
 			if (director->debug_controls)
 			{

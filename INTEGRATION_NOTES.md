@@ -1,3 +1,20 @@
+# 2026-10-09 upstream and credited-fork review
+
+Baseline: `5a9c7892` / v0.5.1-touch. Merge OpenCE `f479e34914604df5a22a2bdb0b38f180a1f702d8`, preserving both histories. Its Linux, Windows and Android jobs passed in upstream run 37922923202. This advances 136 upstream commits (including side-branch history) from `73dc01d0`.
+
+Upstream adds voice chat, vote kick, categorized co-op options, camera interpolation and cyborg animation improvements, renderer transparency/overshield ordering fixes, faster audio mixing/resampling, safer map strings and network input, an Android icon, Steam Deck support and desktop screenshots. Network version remains 24. Android screenshot action remains upstream's no-op. Voice chat needs microphone permission and a network game; hardware/Internet voice behavior has not been tested here.
+
+Conflicts were resolved by retaining Android direct menu/profile pointer routing, SDL virtual gamepad and host hint bridges, shader caching, Bink movies, relay helpers, editable layouts, independent Sinc/Linear audio, themes/map browser, and playlist server support. Regenerated settings and theme XML so upstream voice/co-op controls are available. The mirror-upload fix and Android Quit now also have upstream history. New Opus/ISC notices are packaged alongside existing FFmpeg and font notices.
+
+Credited sources checked after upstream:
+- ChupathingyCE main `b78e6cfa`: most relevant fixes are already merged upstream. Additionally adapted `d4ff4cc2` (bounded cache-header name), `d009a4bf` (custom campaign completion cannot write outside profile flags), and `4c6e68a6` (script speed must be finite and in 0–100). Its Delta service, large CE conversion/hardening series and changed server protocol are not imported.
+- FulGerNet/halo-ce-android (renamed from theLlamaNet), main `28e0e27f`: adapted free-camera input ownership from `f1c3c4d4`, including the earlier rising-edge Zoom toggle needed when a 30 Hz snapshot spans several frames. Kept our movement speed and menu geometry. Production camera regression verifies player-before-director delta ownership, sensitivity, normal cameras and repeated input snapshots.
+- JoshRob297/halo-ce-touch: main `8a6fe36c`, movie source bink-on-main `79847b0e`, and all advertised branches reviewed; no newer movie commits since the prior integration.
+- DamnationCE main `37fcd24e`: upstream voice/co-op additions already arrive through this merge. Recent broad source/type cleanup and the Battle Creek hotfix address its divergent 64-bit/type cleanup; our 32-bit transparent BSP buffer code has not undergone that change. Do not import that cleanup into Android. No additional theme/browser feature selected.
+- fqlx/OpenCE: HTTPS fetch and GitHub API both fail (404/unavailable); current commits cannot be verified. Existing credited compact preset is preserved.
+
+Local checks: touch/coordinate/profile pointer, camera ownership, Java layouts/gyro/startup cheats/disc import, native movie/mobile bridge, renderer/Quit negative controls, keyboard lifecycle with address/undefined sanitizers (leak checking unavailable on this host), sound lifecycle/transition, map browser and dedicated-server checks passed. XML/settings tests passed. Full platform builds and the 32-bit upstream harness run in GitHub CI before release; this host cannot execute 32-bit binaries. No phone, owned game data or second network client is connected, so no gameplay/voice/gyro/rumble testing is claimed.
+
 # 0.5.1 Android visual/exit repair
 
 Baseline: `e4c22f8f` / v0.5.0-touch. User gameplay screenshots show stretched red wall polygons and missing floor/ceiling geometry in a10, plus a30 lifepod geometry artifacts. Diagnosis: the inherited Android renderer has the still-unmerged upstream #165 Mali buffer-copy race. The symptoms are consistent; no device logs or controlled upstream-versus-fork phone run are available to establish this as the only cause.

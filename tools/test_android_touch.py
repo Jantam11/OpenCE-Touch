@@ -112,12 +112,13 @@ int main(void) {
 
 def test_menu_coordinates():
     source = (ROOT / "port/linux/src/d3d8_gl.c").read_text()
-    start = source.index("static void ui_point_from_window(")
-    end = source.index("int halo_ui_pointer_update(", start)
+    start = source.index("static void ui_point_from_window_on(")
+    end = source.index("int halo_scoreboard_pointer_update(", start)
     compile_and_run('''
 #include <assert.h>
 #include <math.h>
 #include <stddef.h>
+#define TRUE 1
 struct render_target_entry { struct { int gl_width, gl_height, width, height; } target; };
 static struct render_target_entry buffer = {{640, 480, 640, 480}};
 static struct { int back_buffer; } device;
