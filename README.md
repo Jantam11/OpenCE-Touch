@@ -20,6 +20,10 @@ Open **OPTIONS** or the native **Porting options** menu to change settings. Layo
 
 **Disc videos:** new installations extract `bink/` alongside `maps/`. Existing players can select **OPTIONS → Import disc movies** and choose their own Halo `.iso`/`.xiso`; this copies movies without replacing maps or profiles. Intro, credits and idle attract-demo videos play with audio, and a tap skips playback. No game videos are bundled in the APK. Other in-engine cutscenes still use the game's renderer.
 
+## Update in 0.5.2-touch
+
+Merged validated OpenCE `f479e349`: voice chat, vote kick, co-op settings, rendering/audio/camera fixes and the new Android icon. Fixed free-camera swipe/gyro ownership and repeated Zoom toggles with [FulGerNet/theLlamaNet's code](https://github.com/FulGerNet/halo-ce-android/commit/f1c3c4d425427779b05a764d10dafdadd753f2e1); added [ChupathingyCE/MrMilenko](https://github.com/ChupathingyCE/chupathingyce) map-header/profile/script checks. Existing layouts, direct menu taps, movies, shader caching, audio resampling, map browser and themes are retained. Voice chat requires microphone permission; phone gameplay/voice testing is still needed. See [changelog](CHANGELOG.md) and [integration notes](INTEGRATION_NOTES.md).
+
 ## Android fixes in 0.5.1-touch
 
 - Main-screen Quit asks for confirmation and closes the app when confirmed; Back cancels. Porting options is a separate row below Quit. The native pause menu keeps its normal Save and Quit behavior.

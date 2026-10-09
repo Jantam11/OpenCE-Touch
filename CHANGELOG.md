@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.2-touch — 2026-10-09
+
+Changes since [v0.5.1-touch](https://github.com/Jantam11/OpenCE-Touch/releases/tag/v0.5.1-touch):
+
+- Merged the newest validated [OpenCE revision `f479e349`](https://github.com/OpenCommunityEdition/OpenCE/commit/f479e34914604df5a22a2bdb0b38f180a1f702d8): voice chat, vote kick, co-op setup options, camera/animation improvements, transparency and overshield rendering fixes, faster audio mixing, map/network checks and the new Android icon. The previous Mali geometry and confirmed Quit fixes are retained.
+- Fixed swipe/gyro input being consumed before the Android free camera could use it, and repeated Zoom toggles within one input tick. Adapted from [FulGerNet/theLlamaNet](https://github.com/FulGerNet/halo-ce-android/commit/f1c3c4d425427779b05a764d10dafdadd753f2e1). Added ChupathingyCE checks for map-header names, custom-map campaign completion and finite script speed.
+- Preserved editable touch layouts/import/export, direct menu/profile taps, Bink movies, gyro/rumble, relay fallback, shader cache, Sinc/Linear audio, map browser and optional menu themes. Updated generated menus for upstream audio/co-op controls. Android version code increased to 7; dependency notices remain in the APK/package.
+
+**Compatibility and validation:** network protocol remains **24**. Upstream Linux, Windows and Android builds passed; this release is published only after integrated Android debug/release builds and touch/mobile/renderer/camera checks pass. Voice chat requires microphone permission and a network game. Android's upstream Screenshot action does nothing. No phone or live second client is connected here; real-phone gameplay, microphone/voice chat, gyro/rumble and Internet multiplayer remain to be tested.
+
+**Fork review:** checked ChupathingyCE, DamnationCE, FulGerNet and JoshRob297. Most useful new fixes arrived through upstream; no newer movie branch changes were available. fqlx/OpenCE currently returns 404, so new commits there could not be checked. Existing features and credits are retained.
+
+**Credits:** [OpenCommunityEdition/OpenCE](https://github.com/OpenCommunityEdition/OpenCE) and its contributors; [ChupathingyCE / MrMilenko](https://github.com/ChupathingyCE/chupathingyce), [FulGerNet / theLlamaNet](https://github.com/FulGerNet/halo-ce-android), kirklandsig and FernandolDev; retained contributions from [DamnationCE](https://github.com/xshxdex98/DamnationCE), [fqlx/OpenCE](https://github.com/fqlx/OpenCE), [JoshRob297](https://github.com/JoshRob297/halo-ce-touch), [FFmpeg](https://ffmpeg.org/), Opus and Lucide. Integration and regression updates coded with AI (OpenAI Codex), maintained by Jantam11. Dependency licenses and FFmpeg relinking materials are included in the ZIP.
+
+[Full comparison](https://github.com/Jantam11/OpenCE-Touch/compare/v0.5.1-touch...v0.5.2-touch)
+
 ## 0.5.1-touch — 2026-10-08
 
 Changes since [v0.5.0-touch](https://github.com/Jantam11/OpenCE-Touch/releases/tag/v0.5.0-touch):

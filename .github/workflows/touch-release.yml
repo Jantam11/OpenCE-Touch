@@ -8,7 +8,7 @@ on:
       tag:
         description: Release version
         required: true
-        default: v0.5.1-touch
+        default: v0.5.2-touch
   workflow_call:
     inputs:
       build_run:
@@ -47,8 +47,9 @@ jobs:
           import zipfile
           p = Path('package')
           assert (p/'FFmpeg-LGPL.txt').is_file() and (p/'bink-relink.zip').is_file()
+          assert (p/'opus-COPYING.txt').is_file() and (p/'lucide-LICENSE.txt').is_file()
           with zipfile.ZipFile(p/'app-release.apk') as z:
-              for name in ['lib/arm64-v8a/libbinkplayer.so','lib/arm64-v8a/libmain.so','lib/arm64-v8a/libSDL3.so','assets/halo_guest.elf']:
+              for name in ['lib/arm64-v8a/libbinkplayer.so','lib/arm64-v8a/libmain.so','lib/arm64-v8a/libSDL3.so','assets/halo_guest.elf','assets/licenses/opus-COPYING.txt','assets/licenses/lucide-LICENSE.txt']:
                   assert name in z.namelist(), name
           PY
           mkdir release

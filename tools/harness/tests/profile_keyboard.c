@@ -13,7 +13,7 @@ struct platform_input_state { unsigned char keys[TEST_SCANCODE_COUNT], mouse_but
 #define platform_screen_keyboard(show, password) ((void)0)
 typedef struct { unsigned short wButtons; BYTE bAnalogButtons[8]; SHORT sThumbLX, sThumbLY; } XINPUT_GAMEPAD;
 #define SDL_BUTTON_X1 4
-static BOOL text_typing, text_typing_enter_armed, text_typing_keyboard, text_typing_field;
+static BOOL text_typing, text_typing_enter_armed, text_typing_enter_blocked, text_typing_keyboard, text_typing_field;
 static struct { boolean active, shift_active, caps_active, symbols_active;
     void *keyboard; short row, column; word buffer_size; short last_event, last_key,
     number_of_event_repeats, caption_index; boolean last_exit_saved_text, first_key_replaces_buffer;
@@ -70,6 +70,7 @@ static void ordinary_input(void)
     struct platform_input_state input = {0}; XINPUT_GAMEPAD pad = {0};
     CHECK(!virtual_keyboard_globals.active, "keyboard remained active");
     CHECK(!text_typing, "closed keyboard left typing mode enabled");
+    keyboard_gamepad(&input, &pad); /* Release Done before a fresh Enter. */
     input.keys[SDL_SCANCODE_RETURN] = 1;
     input.keys[SDL_SCANCODE_W] = 1;
     keyboard_gamepad(&input, &pad);
