@@ -84,6 +84,7 @@ int host_sdl_gamepad_type(unsigned int gamepad);
 unsigned int host_sdl_gamepad_id(unsigned int gamepad);
 int host_sdl_is_virtual_joystick(unsigned int id);
 int host_sdl_rumble_gamepad(unsigned int gamepad, unsigned int low, unsigned int high, unsigned int milliseconds);
+void host_sdl_close_gamepad(unsigned int gamepad);
 /* callback: void (*)(void *userdata, unsigned int stream, int additional, int total),
 called on the audio thread */
 unsigned int host_sdl_open_audio_stream(unsigned int device, const void *spec, unsigned int callback, unsigned int userdata);
@@ -116,6 +117,7 @@ void host_gl_wait_frame(unsigned int slot);
 void host_android_path(int which, char *buffer, unsigned int size);
 
 
+void host_gesture_insets(int *insets);
 void host_touch_rumble(unsigned int low, unsigned int high);
 int host_touch_camera_read(void);
 float host_touch_field_of_view(void);

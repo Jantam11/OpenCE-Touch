@@ -16,6 +16,8 @@ PREAMBLE = r'''
 #include <stdlib.h>
 #include <string.h>
 #define HALO_ANDROID 1
+#define HALO_GLES 1
+#define HALO_ARM64_GUEST 1
 #define TRUE 1
 #define FALSE 0
 #define STREAM_BUFFER_RING 3UL

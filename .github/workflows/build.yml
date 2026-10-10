@@ -29,6 +29,10 @@ on:
         description: Publish the touch release after all build checks pass
         type: boolean
         default: false
+      profile:
+        description: Also build the Linux profiling flavour
+        type: boolean
+        default: false
 
 concurrency:
   group: build-${{ github.ref }}
@@ -79,12 +83,19 @@ jobs:
       - name: Debug
         run: python tools/ci_build.py linux debug
 
+      # (the profiling build, configure.py --profile, which no other step
+      # compiles: only when a run started by hand asks for it, as it costs a
+      # build of its own)
+      - name: Profile
+        if: github.event_name == 'workflow_dispatch' && inputs.profile
+        run: python tools/ci_build.py linux profile
+
       - name: Release
         run: python tools/ci_build.py linux release
 
       - name: Test
         run: |
-          python -m pytest -q tools/test_linux_port.py tools/test_host_watch_hash.py tools/harness
+          python -m pytest -q tools/test_linux_port.py tools/test_host_watch_hash.py tools/test_touch_menu.py tools/harness tools/test_profile.py
           python tools/test_light_storage.py
           python tools/test_sound_lifecycle.py
           python tools/test_sound_transition.py
@@ -129,6 +140,10 @@ jobs:
           python3 tools/test_android_mobile.py
           python3 tools/test_android_render_quit.py
           python3 tools/test_camera_touch.py
+          python3 tools/test_android_touch_merge.py
+          python3 tools/test_virtual_keyboard_input.py
+          python3 -m pip install pytest
+          python3 -m pytest -q tools/test_touch_menu.py tools/test_linux_port.py -k "menus_are_well_formed or touch_menu"
 
       - uses: actions/cache@v4
         with:
@@ -174,6 +189,10 @@ jobs:
         env:
           HALO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: python3 tools/ci_build.py android release
+
+      # the touch controls' layout and gyroscope maths (the runner's JDK)
+      - name: Test the touch layout
+        run: python3 tools/test_touch_layout.py
 
       - name: Compile cache
         run: ccache --show-stats

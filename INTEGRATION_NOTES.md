@@ -1,3 +1,18 @@
+# 2026-10-10 Android upstream and credited-fork review
+
+Baseline: v0.5.2-touch / `0457f232`. Merge OpenCE `bd98c8fb20c1638bb66e22c94f61b739dcb45033`, preserving both histories. Its code parent `5e8ab023` passed the Linux, Windows and Android jobs in upstream run 38025177205; the final commit changes documentation only. Integrated testing on touch-controls is Android only.
+
+Upstream includes protocol 25, co-op integrated lights/respawn fixes, frame-throttle sleeping, gamepad/profile-save fixes, rendering/audio/memory repairs, wider menu setting targets, in-game campaign Settings and FOV/viewmodel settings. Preserve the SDL virtual gamepad, editable/importable layouts, mouse-based swipe/gyro input, flying camera, native profile taps, main-menu confirmed Quit, Bink movies, map browser, menu themes, shader cache, Sinc/Linear audio and relay. `HALO_TOUCH_SDL_GAMEPAD` selects the fork overlay and excludes upstream's second overlay consumer. Both guest ABI and GLES macros are set after upstream's Android macro split. Settings/theme XML is regenerated from the settings generator.
+
+Forks checked after upstream:
+- DamnationCE `e8d806dd`: imported `ff654a77` by xshxdex98, guarding release of an absent progress-capture depth buffer. Its Windows PGO refresh and uncapped frame-limit policy are not Android additions selected for this release.
+- ChupathingyCE `eccc6ec4`: new BC7 support `44a03b5b` relies on that fork's `ce_repairs` and `ce_resources` conversion pipeline, absent here. It was reviewed but not imported as an isolated patch. Its broad converter/hardening series remains a separate integration.
+- FulGerNet/halo-ce-android `28e0e27f`: unchanged; camera ownership fix retained.
+- JoshRob297/halo-ce-touch main `8a6fe36c`: unchanged. Movie branch checked separately before release.
+- fqlx/OpenCE: GitHub API still returns 404; existing compact preset and credits retained.
+
+Local checks cover production touch taps/cancellation, controller routing, menu coordinates/profile keyboard, flying-camera delta ownership, renderer-upload race and Quit negative controls, optional depth-buffer release with a negative control, and no second overlay consumer. Four menu themes and upstream touch gesture tests pass. Keyboard address/undefined-sanitizer cases pass with leak checking disabled locally because this execution host cannot inspect /proc task entries; Android CI runs the normal sanitizer check. The complete Java/native mobile tests and Android debug/release compilation must pass in CI before publication. No phone or owned game data is connected; no gameplay, microphone, gyro/rumble, physical GPU, movie playback or live multiplayer verification is claimed.
+
 # 2026-10-09 upstream and credited-fork review
 
 Baseline: `5a9c7892` / v0.5.1-touch. Merge OpenCE `f479e34914604df5a22a2bdb0b38f180a1f702d8`, preserving both histories. Its Linux, Windows and Android jobs passed in upstream run 37922923202. This advances 136 upstream commits (including side-branch history) from `73dc01d0`.
