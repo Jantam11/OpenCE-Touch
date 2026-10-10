@@ -375,7 +375,7 @@ jobs:
     uses: ./.github/workflows/touch-release.yml
     with:
       build_run: ${{ format('{0}', github.run_id) }}
-      tag: v0.5.2-touch
+      tag: v0.5.3-touch
 
   notify:
     # A Discord embed for the run, to the DISCORD_WEBHOOK secret (nothing

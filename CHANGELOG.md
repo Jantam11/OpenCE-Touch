@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.3-touch — 2026-10-10
+
+Changes since [v0.5.2-touch](https://github.com/Jantam11/OpenCE-Touch/releases/tag/v0.5.2-touch):
+
+- Merged validated [OpenCE `bd98c8fb`](https://github.com/OpenCommunityEdition/OpenCE/commit/bd98c8fb20c1638bb66e22c94f61b739dcb45033): wider menu tap targets, in-game campaign Settings, FOV/viewmodel controls, co-op respawn improvements, frame-throttle sleeping and rendering/audio/memory repairs.
+- Kept editable touch layouts/import/export, profile/menu taps, gyro/free camera, movies, map browser, optional themes, shader cache, audio resampling and relay. Prevented duplicate input from upstream's new overlay; regenerated settings/theme screens. Added [xshxdex98/DamnationCE's missing depth-buffer guard](https://github.com/xshxdex98/DamnationCE/commit/ff654a774061c74d30f31ce986d7ebdefcafad74).
+- Android-only debug/release build and regression gate, with production-code checks for one touch consumer and optional depth-buffer release. Android version code 8.
+
+**Compatibility and validation:** multiplayer is now **protocol 25**; protocol-24 clients must update. Integrated Android debug/release builds, touch/mobile/camera/renderer/Quit/keyboard regressions and menu checks are required before publication. No phone is connected: gameplay, physical GPU behavior, movies, gyro/rumble, microphone and live multiplayer remain unverified.
+
+**Fork review:** FulGerNet and JoshRob297 (including bink-on-main) have no newer selected changes. ChupathingyCE's BC7 feature needs its separate map-conversion pipeline and was not imported. Reviewed DamnationCE; imported its depth-buffer fix. fqlx/OpenCE still returns 404. Existing features and credits are retained.
+
+**Credits:** [OpenCommunityEdition/OpenCE](https://github.com/OpenCommunityEdition/OpenCE) and its contributors; [xshxdex98/DamnationCE](https://github.com/xshxdex98/DamnationCE) for the new depth-buffer fix; retained work from [ChupathingyCE/MrMilenko](https://github.com/ChupathingyCE/chupathingyce), [FulGerNet/theLlamaNet](https://github.com/FulGerNet/halo-ce-android), [fqlx/OpenCE](https://github.com/fqlx/OpenCE), [JoshRob297](https://github.com/JoshRob297/halo-ce-touch), kirklandsig, FernandolDev, [FFmpeg](https://ffmpeg.org/), Opus and Lucide. Integration and regression changes coded with AI (OpenAI Codex), maintained by Jantam11. Dependency notices and FFmpeg relinking materials remain in the ZIP.
+
+[Full comparison](https://github.com/Jantam11/OpenCE-Touch/compare/v0.5.2-touch...v0.5.3-touch)
+
 ## 0.5.2-touch — 2026-10-09
 
 Changes since [v0.5.1-touch](https://github.com/Jantam11/OpenCE-Touch/releases/tag/v0.5.1-touch):
