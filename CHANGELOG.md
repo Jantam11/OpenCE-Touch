@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.4-touch — 2026-10-10
+
+- Fixed Android startup failures caused by overlapping Java memory on some AYN and Retroid handhelds, including older kernels and devices that restrict memory inspection.
+- Added sharper controller-button icons and corrected their lettering. High-resolution icon settings now update immediately.
+- Updated high-resolution weapon reticles, including rocket launcher, Wraith and sniper scope graphics.
+
+**Credits:** [MrMilenko](https://github.com/MrMilenko) for the Android startup fixes; [saulob](https://github.com/saulob) for controller-button artwork; [MrBruh](https://github.com/cybersecurity) for memory fixes, icon corrections and HUD work; Aerocatia for HUD reference photos; [OpenCE contributors](https://github.com/OpenCommunityEdition/OpenCE). Earlier contributor credits are in the [README](README.md).
+
+[Full comparison](https://github.com/Jantam11/OpenCE-Touch/compare/v0.5.3-touch...v0.5.4-touch)
+
 ## 0.5.3-touch — 2026-10-10
 
 Changes since [v0.5.2-touch](https://github.com/Jantam11/OpenCE-Touch/releases/tag/v0.5.2-touch):

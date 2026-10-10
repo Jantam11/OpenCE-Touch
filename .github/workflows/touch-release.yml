@@ -8,7 +8,7 @@ on:
       tag:
         description: Release version
         required: true
-        default: v0.5.3-touch
+        default: v0.5.4-touch
   workflow_call:
     inputs:
       build_run:
@@ -65,7 +65,7 @@ jobs:
           entries=Path('CHANGELOG.md').read_text().split('## ')
           entry=next(e for e in entries if e.startswith(version+' '))
           notes=entry.split('\n',1)[1].strip()
-          notes+='\n\nDownload **OpenCE-Touch.apk** to install. The ZIP also includes dependency licenses and FFmpeg source/relinking materials.\n\nChecked: Android debug/release builds; touch/profile keyboard, mobile feature and renderer/quit regression checks. Real-phone gameplay, gyro/rumble, video/audio and Internet relay testing remain to be confirmed.\n\nSigning: without configured signing secrets, CI uses a temporary runner key. Installation over an older APK may fail. Back up your profiles/saves before uninstalling an older version.\n\nBuild: https://github.com/'+os.environ['GH_REPO']+'/actions/runs/'+os.environ['BUILD_RUN']+'\n'
+          notes+='\n\nDownload **OpenCE-Touch.apk** to install. The ZIP also includes dependency licenses and FFmpeg source/relinking materials.\n\nInstallation over an older APK may fail because CI uses a temporary signing key. Back up saves before uninstalling.\n\nBuild: https://github.com/'+os.environ['GH_REPO']+'/actions/runs/'+os.environ['BUILD_RUN']+'\n'
           Path('notes.md').write_text(notes)
           PY
           gh release create "$TAG" release/* --target "$GITHUB_SHA" --latest --title "OpenCE-Touch ${TAG#v}" --notes-file notes.md

@@ -20,9 +20,9 @@ Open **OPTIONS** or the native **Porting options** menu to change settings. Layo
 
 **Disc videos:** new installations extract `bink/` alongside `maps/`. Existing players can select **OPTIONS → Import disc movies** and choose their own Halo `.iso`/`.xiso`; this copies movies without replacing maps or profiles. Intro, credits and idle attract-demo videos play with audio, and a tap skips playback. No game videos are bundled in the APK. Other in-engine cutscenes still use the game's renderer.
 
-## Update in 0.5.3-touch
+## Update in 0.5.4-touch
 
-Merged validated OpenCE `bd98c8fb`: broader menu tap targets, in-game campaign Settings, FOV/viewmodel controls, co-op respawn improvements and rendering/audio/memory repairs. Preserves this fork's editable SDL touch layouts, direct profile/menu taps, movies, gyro/free camera, map browser and themes. Added [xshxdex98/DamnationCE's progress depth-buffer fix](https://github.com/xshxdex98/DamnationCE/commit/ff654a774061c74d30f31ce986d7ebdefcafad74). Multiplayer now uses **protocol 25**; protocol-24 builds must update to join. Testing and packaging on `touch-controls` are Android only. Phone gameplay remains unverified. See [changelog](CHANGELOG.md) and [integration notes](INTEGRATION_NOTES.md).
+Android startup fixes for overlapping Java memory on some handhelds, sharper controller-button icons, and updated high-resolution weapon reticles. Credits and details are in the [changelog](CHANGELOG.md). Multiplayer remains **protocol 25**.
 
 ## Android fixes in 0.5.1-touch
 

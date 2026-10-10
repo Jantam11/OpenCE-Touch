@@ -1,3 +1,7 @@
+# 0.5.4-touch upstream update
+
+Merged only OpenCE's 12 new commits since bd98c8fb, through 9da2a45ffa364b720ae9faab6a1dee876926fe42. Upstream run 38042641991 passed all platform builds. Changes cover Android ART overlap recovery and early reservation in a separate game process, memory diagnostics, controller icons and reticles. Only the Android README conflicted; retained this fork's controls and Bink documentation. No additional fork commits selected. Integrated release checks are Android only.
+
 # 2026-10-10 Android upstream and credited-fork review
 
 Baseline: v0.5.2-touch / `0457f232`. Merge OpenCE `bd98c8fb20c1638bb66e22c94f61b739dcb45033`, preserving both histories. Its code parent `5e8ab023` passed the Linux, Windows and Android jobs in upstream run 38025177205; the final commit changes documentation only. Integrated testing on touch-controls is Android only.
