@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.5-touch — 2026-10-12
+
+- Added Custom Edition map sharing between multiplayer players and browser/native Internet play. Multiplayer now uses **protocol 27**; older clients must update.
+- Improved rendering and text batching; added optional first-person legs, shield color, glow and first-person shield effects.
+- Fixed co-op elevator/player crashes, respawned vehicles, lobby countdown interruptions and custom HUD digits.
+- Fixed touchscreen level, map and game-type selections starting the previously selected entry.
+
+**Credits:** [OpenCE contributors](https://github.com/OpenCommunityEdition/OpenCE), including MrBruh, innerhat-dev, jcompto95-tech, chestahh, eltanschauung, bertoaldo, bnunu and addisonbair; [xshxdex98 / DamnationCE](https://github.com/xshxdex98/DamnationCE) for the touchscreen selection fix. Earlier contributor credits remain in the [README](README.md).
+
+[Full comparison](https://github.com/Jantam11/OpenCE-Touch/compare/v0.5.4-touch...v0.5.5-touch)
+
 ## 0.5.4-touch — 2026-10-10
 
 - Fixed Android startup failures caused by overlapping Java memory on some AYN and Retroid handhelds, including older kernels and devices that restrict memory inspection.

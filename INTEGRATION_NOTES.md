@@ -1,3 +1,15 @@
+# Update 2026-10-12: 0.5.5-touch
+
+Merged all 54 new upstream commits through `86be005a` (build-190), retaining both parents. Upstream run 38172922506 passed Linux, Windows and Android debug/release jobs before selection. This fork builds Android only; web sources/history are retained but its web CI is skipped on touch-controls.
+
+Retained SDL virtual gamepad, layout import/export, direct menu/profile taps, camera/gyro input, movies, main-menu confirmed Quit, Mali upload fix, shader cache, Sinc/Linear audio, map browser, themes and encrypted relay. Combined WebRTC with relay and peer-to-peer map sharing. Updated the countdown regression to upstream behavior: machines without players no longer block start; teams/player minimums and precaching still apply. Regenerated settings and themed XML for new shield/legs/map-sharing controls.
+
+Adapted xshxdex98/DamnationCE `fba90813`, retaining its source reference and author credit: read the newly focused level/map/gametype at activation, preventing stale touchscreen selections.
+
+Fork review: ChupathingyCE `c1805623` mainly follows network versions/signalling already supplied by upstream; its BC7 decoder depends on that fork's CE bitmap repair pipeline and remains deferred. DamnationCE `7be58b2b`: selected touchscreen fix; divergent 64-bit/editor/platform changes excluded. FulGerNet `3bf59027`: upstream sync already covered; `db04b1d4` HUD panel editor/native Porting UI is a candidate for a separate integration because it changes HUD positioning, guest imports and menu routing together. JoshRob297 main and bink-on-main: reviewed for newer movie work. fqlx/OpenCE returns 404. pfista's recent HUD changes target its converted map/custom weapon data, not this stock Android port; map downloader remains proposal only.
+
+Local menu, map browser, touch, camera, renderer/Quit and input ownership checks pass. Full JNI checks require JDK headers unavailable locally; CI must pass Android debug/release, native mobile and Java layout checks before publication. No phone or game data is connected; gameplay/hardware/live networking verification is not claimed.
+
 # 0.5.4-touch upstream update
 
 Merged only OpenCE's 12 new commits since bd98c8fb, through 9da2a45ffa364b720ae9faab6a1dee876926fe42. Upstream run 38042641991 passed all platform builds. Changes cover Android ART overlap recovery and early reservation in a separate game process, memory diagnostics, controller icons and reticles. Only the Android README conflicted; retained this fork's controls and Bink documentation. No additional fork commits selected. Integrated release checks are Android only.

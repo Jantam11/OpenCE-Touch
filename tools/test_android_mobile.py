@@ -280,8 +280,8 @@ int main(void) {
  precached = 1;
  assert(network_game_server_port_force_start(&s) && starts == 1);
  players_on_each = 0;
- assert(!server_ok_to_countdown(&s));
- assert(!network_game_server_port_force_start(&s) && starts == 1);
+ assert(server_ok_to_countdown(&s)); /* joining/leaving machines no longer reset the lobby */
+ assert(network_game_server_port_force_start(&s) && starts == 2);
  players_on_each = 1; s.game.player_count = 2;
  assert(!server_ok_to_countdown(&s)); /* multiple players still need teams */
  needs_teams = 0; s.game.minimum_players = 3;

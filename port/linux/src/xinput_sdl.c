@@ -173,7 +173,8 @@ static void touch_used(void)
 
 /* the touch controls' stick as the player's movement (input_abstraction.c's
 keyboard_controls_update), forward and strafe -1..1, whatever the
-profile's sticks do; nonzero while it is pushed. Nothing but on Android. */
+profile's sticks do; nonzero while it is pushed. Nothing but on Android and
+the web (port/web/site/touch.js). */
 int halo_linux_touch_move(short controller_index, float *forward, float *strafe)
 {
 	*forward = 0.0f;
@@ -194,7 +195,7 @@ int halo_linux_touch_move(short controller_index, float *forward, float *strafe)
 the mouse's rate per pixel (the view applies its own sensitivity), each
 apart: player_control.c inverts the swipe as the profile inverts the stick,
 not the gyroscope, which turns as the phone does, and makes them the
-stick's rate before the magnetism. Nothing but on Android. */
+stick's rate before the magnetism. Nothing but on Android and the web. */
 int halo_linux_touch_look(short gamepad_index, float *yaw, float *pitch, float *gyro_yaw, float *gyro_pitch)
 {
 	*yaw = 0.0f;
@@ -636,6 +637,14 @@ the same weapon straight back. Timed in milliseconds, not polls: polls come
 once a frame, at the display's refresh rate. */
 #define WHEEL_PRESS_MS 50
 #define WHEEL_SCROLL_GAP_MS 200
+/* how far the wheel turns before it switches: a notch. A browser's notch is
+pixels, which SDL counts as a notch per 100, and some send fewer for one
+(about half), so in the web build half of SDL's notch is one */
+#ifdef HALO_WEB
+#define WHEEL_NOTCH 0.5f
+#else
+#define WHEEL_NOTCH 1.0f
+#endif
 
 /* debug.test_input "bot:<seed>": a scripted player for the automated
 network tests (port/linux/game/network_test.c), different for each seed:
@@ -712,7 +721,7 @@ static void wheel_update(void)
 	pthread_mutex_lock(&mouse_lock);
 	if (!wheel_scrolling)
 	{
-		if (fabsf(mouse_wheel_accumulated) >= 1.0f)
+		if (fabsf(mouse_wheel_accumulated) >= WHEEL_NOTCH)
 		{
 			wheel_scrolling = TRUE;
 			wheel_direction = mouse_wheel_accumulated > 0.0f ? 1 : -1;
@@ -1055,8 +1064,9 @@ DWORD WINAPI XInputSetState(HANDLE device, PXINPUT_FEEDBACK feedback)
 	feedback->Header.dwStatus = ERROR_SUCCESS;
 	if (port < 0)
 		return ERROR_DEVICE_NOT_CONNECTED;
-#ifdef HALO_ANDROID
-	/* the phone vibrates for the touch controls' player */
+#if defined(HALO_ANDROID) || defined(HALO_WEB)
+	/* the phone vibrates for the touch controls' player (in a browser, where
+	it can) */
 	if (port == 0)
 		host_touch_rumble(feedback->Rumble.wLeftMotorSpeed, feedback->Rumble.wRightMotorSpeed);
 #endif

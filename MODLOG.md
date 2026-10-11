@@ -5,3 +5,7 @@ Work starts at 5a9c7892 on touch-controls. Chosen route: merge validated upstrea
 See INTEGRATION_NOTES.md for revisions, conflict decisions and local checks. GitHub CI is required for full builds and 32-bit regression execution. Compilation is separate from phone gameplay verification.
 
 Initial integration run 37933045092: Linux debug/release passed; 224 tests passed, 16 profile fixture compile failures. Fixture repaired; native lifetime/negative-control tests pass. Final validation includes version 0.5.2-touch/code 7 and package checks for Opus/Lucide notices.
+
+## 2026-10-12 update
+
+Started at c2c1705a / v0.5.4-touch. Merged upstream build-190 and DamnationCE touchscreen selection fix. Protocol 27; version code 10. Preserve v0.5.4-touch as rollback. Android CI gates publication; no phone gameplay claimed. Git HTTPS push has no credentials, so publish Git objects and refs through the authorized GitHub connector.
