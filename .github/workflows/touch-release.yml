@@ -1,0 +1,71 @@
+name: Touch release
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Successful Build run ID for this exact branch head
+        required: true
+      tag:
+        description: Release version
+        required: true
+        default: v0.6.0-touch
+  workflow_call:
+    inputs:
+      build_run:
+        required: true
+        type: string
+      tag:
+        required: true
+        type: string
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/touch-controls'
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BUILD_RUN: ${{ inputs.build_run }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require passing builds of this revision
+        run: |
+          [[ "$BUILD_RUN" =~ ^[0-9]+$ ]]
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-touch$ ]]
+          gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN" > run.json
+          jq -e --arg sha "$GITHUB_SHA" '.head_sha == $sha and .name == "Build"' run.json
+          gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN/jobs?per_page=100" > jobs.json
+          jq -e '[.jobs[] | select(.name == "android")] | length == 1 and all(.conclusion == "success")' jobs.json
+      - name: Download and verify Android release
+        run: |
+          gh run download "$BUILD_RUN" --name halo-android-release --dir package
+          python3 - <<'PY'
+          from pathlib import Path
+          import zipfile
+          p = Path('package')
+          assert (p/'FFmpeg-LGPL.txt').is_file() and (p/'bink-relink.zip').is_file()
+          assert (p/'opus-COPYING.txt').is_file() and (p/'lucide-LICENSE.txt').is_file()
+          with zipfile.ZipFile(p/'app-release.apk') as z:
+              for name in ['lib/arm64-v8a/libbinkplayer.so','lib/arm64-v8a/libmain.so','lib/arm64-v8a/libSDL3.so','assets/halo_guest.elf','assets/licenses/opus-COPYING.txt','assets/licenses/lucide-LICENSE.txt']:
+                  assert name in z.namelist(), name
+          PY
+          mkdir release
+          cp package/app-release.apk release/OpenCE-Touch.apk
+          (cd package && zip -qr ../release/halo-android-release.zip .)
+          (cd release && sha256sum OpenCE-Touch.apk halo-android-release.zip > SHA256SUMS.txt)
+      - name: Publish with short changelog and credits
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          version=os.environ['TAG'][1:]
+          entries=Path('CHANGELOG.md').read_text().split('## ')
+          entry=next(e for e in entries if e.startswith(version+' '))
+          notes=entry.split('\n',1)[1].strip()
+          notes+='\n\nDownload **OpenCE-Touch.apk** to install. The ZIP also includes dependency licenses and FFmpeg source/relinking materials.\n\nInstallation over an older APK may fail because CI uses a temporary signing key. Back up saves before uninstalling.\n\nBuild: https://github.com/'+os.environ['GH_REPO']+'/actions/runs/'+os.environ['BUILD_RUN']+'\n'
+          Path('notes.md').write_text(notes)
+          PY
+          gh release create "$TAG" release/* --target "$GITHUB_SHA" --latest --title "OpenCE-Touch ${TAG#v}" --notes-file notes.md

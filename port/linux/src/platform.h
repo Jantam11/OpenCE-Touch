@@ -111,6 +111,8 @@ the window opens, or between frames), with `count` buttons (3 at most: Android's
 when it cannot ask */
 int platform_ask(const char *title, const char *text, const char *const *labels, int count, int default_index);
 const char *platform_save_root(void);
+/* Optional desktop unattended host; never enabled on Android. */
+BOOL platform_dedicated(void);
 
 /* ---------- contiguous ("physical") memory
 

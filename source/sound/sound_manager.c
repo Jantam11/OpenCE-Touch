@@ -1550,9 +1550,10 @@ static boolean sound_set_definition_end(
 
 		if (channel_index != NONE)
 		{
-			/* port: sound_find_like_channel excludes the current voice. */
-			sound_stop(channel_get(channel_index)->sound_index);
-			return TRUE;
+			/* Also guard the result before queueing the next permutation. */
+			long victim_sound_index = channel_get(channel_index)->sound_index;
+			sound_stop(victim_sound_index);
+			return victim_sound_index != sound_index;
 		}
 
 		/* port: no other voice can be preempted; tell the caller this one
@@ -1615,6 +1616,8 @@ static long update_potentially_audible_looping_sound(
 				sound->track_proc = track_loop_track_sound;
 				sound->fade_stop_time = 0;
 				sound->fade_start_time = 0;
+				sound->fade_interpolation_start = 1.f;
+				sound->fade_interpolation_end = 1.f;
 				sound->next_definition_index = NONE;
 				sound->pitch_range_index =
 					sound_definition_find_pitch_range_by_pitch(
@@ -1638,6 +1641,7 @@ static long update_potentially_audible_looping_sound(
 					TRUE,
 					FALSE);
 				looping_sound->component_sound_count++;
+
 			}
 		}
 	}
@@ -1798,7 +1802,9 @@ static real sound_calculate_fade(
 	long sound_index)
 {
 	struct sound_datum *sound = sound_get(sound_index);
-	real fade = 1.f;
+	/* A completed fade keeps its endpoint. Another query in this frame (or
+	   after a cache delay) must not bring a stopped voice back to full gain. */
+	real fade = sound->fade_interpolation_end;
 
 	if (sound->fade_start_time != sound->fade_stop_time)
 	{
@@ -1870,6 +1876,7 @@ static void sound_start_fade(
 		fade_in_sound_index!=NONE || fade_out_sound_index!=NONE);
 
 	fade_start_time = sound_manager_globals.render_time - 1;
+
 	fade_stop_time = (long)(seconds * 1000.f + fade_start_time);
 	fade_stop_time = MAX(fade_stop_time, sound_manager_globals.render_time);
 
@@ -2001,6 +2008,7 @@ static void sound_stop(
 	struct sound_datum *sound = sound_get(sound_index);
 	struct sound_definition *definition =
 		sound_definition_get(sound->definition_index);
+
 
 	if (sound->playing_channel_index != NONE)
 	{
@@ -2544,6 +2552,8 @@ long sound_new_impulse(
 											NONE);
 									sound->fade_stop_time = 0;
 									sound->fade_start_time = 0;
+									sound->fade_interpolation_start = 1.f;
+									sound->fade_interpolation_end = 1.f;
 									sound->loop_track_index = NONE;
 									_sound_cache_sound_request(
 										sound_permutation_get(
@@ -3114,6 +3124,7 @@ static void process_looping_sounds(
 
 		if (looping_sound->flip_flop != sound_manager_globals.flip_flop)
 		{
+
 			datum_delete(looping_sound_data, looping_sound_index);
 		}
 		else if (looping_sound->state != _looping_sound_refresh_stop)

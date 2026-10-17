@@ -348,6 +348,8 @@ the setting for one start of the game. It has priority over the file.
 | `display.menus` | `"pc"` | `HALO_MENUS` | `"pc"`: the PC version's menus, from the files in `port/assets/menus` and a `menus` folder next to `config.toml`. Refer to "Menus". `"xbox"`: the Xbox's menus. |
 | `display.player_names` | `"all"` | `HALO_PLAYER_NAMES` | In multiplayer, whose names are drawn above their heads: `"all"`, `"allies"`, `"enemies"` or `"none"`. An ally's name is drawn above the triangle the game shows over teammates. An enemy's name shows only within the motion sensor's reach, while the enemy is in sight and not camouflaged, so it never shows where an enemy hides. The gametype's motion tracker setting also applies: no names if it shows no players, only allies' if it shows only friends. |
 | `display.player_name_scale` | `1.0` | `HALO_PLAYER_NAME_SCALE` | How large the players' names are drawn: `1.0` is three quarters of the size of the HUD's text, from `0.25` to `4`. With high-res text, larger names are rasterized at their size, so they stay sharp. |
+| `display.powerup_timers` | `false` | `HALO_POWERUP_TIMERS` | `true`: a small line of the HUD's text near the top of the view shows the seconds left on the player's active camouflage, overshield and full spectrum vision while one is on ("CAMO 12   OVERSHIELD 41"). The overshield's time is what is left of it above full: it counts down only in multiplayer, where it drains, so in campaign it shows none. Split screen: each player's own. `false`: none, as the original game. |
+| `display.loading_screen_min_seconds` | `0.0` | `HALO_LOADING_SCREEN_MIN_SECONDS` | Keep the original loading screen (the picture with the glow that crosses it) up for at least this many seconds, up to 30, when a level loads, as loading from the Xbox's disc did; the port's loads are usually over before it shows. Also when the level is already loaded (a restart). Only in a game no other machine is in (campaign, split screen): a game on the network (system link, online, network co-op) loads as fast as it can, so that no machine waits on another. Never for the main menu. `0`: no wait. |
 | `display.scoreboard_team_layout` | `"teams"` | `HALO_SCOREBOARD_TEAM_LAYOUT` | How the multiplayer scoreboard (hold BACK, or tab) lists a team game's players. `"teams"`: a column for each team, red on the left and blue on the right. `"score"`: all the players in order of score. With more players than fit, the mouse wheel and Page Up / Page Down scroll the scoreboard. |
 | `display.scoreboard_background` | `true` | `HALO_SCOREBOARD_BACKGROUND` | `true`: the multiplayer scoreboard (hold BACK, or tab) has a panel behind its text, for clearer text. |
 | `display.scoreboard_background_color` | `"16, 16, 16, 150"` | `HALO_SCOREBOARD_BACKGROUND_COLOR` | The colour of the scoreboard's panel: `"red, green, blue, alpha"`, each from `0` to `255`. Alpha `0` is see-through, `255` is solid. |
@@ -362,6 +364,8 @@ the setting for one start of the game. It has priority over the file.
 | `audio.voice_chat` | `"push_to_talk"` | `HALO_VOICE_CHAT` | How you talk in voice chat: `"push_to_talk"` (while `controls.push_to_talk` is held; the microphone opens when you first press it), `"open_mic"` (when the microphone hears speech), or `"off"`. You hear the other players in every case. Refer to "Voice chat". |
 | `audio.voice_volume` | `1.0` | `HALO_VOICE_VOLUME` | The volume of the voices of the other players, `0` to `2`. |
 | `audio.output_device`, `audio.input_device` | `"default"` | `HALO_AUDIO_OUTPUT_DEVICE`, `HALO_AUDIO_INPUT_DEVICE` | The speakers and the microphone, by the name that Settings > Audio shows, or `"default"` for the device of the system. If the device is not found, the game uses the device of the system. Not on Android. |
+| `audio.loose_sounds` | `false` | `HALO_LOOSE_SOUNDS` | For those who make sounds. `true`: each sound of a map that has a sound tag file of its name in `tags/` in the data root (for example `tags/sound/sfx/weapons/assault rifle/fire.sound`) plays from that file. The files are Halo PC tag files, as the Halo Editing Kit and Invader write them. At the console, `loose_sounds_reload` reads the files again, and `loose_sounds false` plays the sounds of the map again. When a file changes, all sounds stop. |
+| `audio.resampling` | `"sinc"` | `HALO_AUDIO_RESAMPLING` | How the sounds, most of them recorded at 22 kHz, are brought to the output's 48 kHz. `"sinc"`: a windowed sinc low pass keeps each sound's band (flat to about 9 kHz for a 22 kHz sound) and nothing above it. `"linear"`: linear interpolation, as before OpenCE's build 130: the top of each sound's band is duller (-4 dB at 8 kHz) and images of the band reach up to 22 kHz, a brighter, grainier sound. |
 | `input.mouse_sensitivity` | `1.0` | `HALO_MOUSE_SENSITIVITY` | The multiplier for the mouse aim. |
 | `input.mouse_vertical_sensitivity` | `0.0` | `HALO_MOUSE_VERTICAL_SENSITIVITY` | The multiplier for the vertical mouse aim. `0`: the same as `input.mouse_sensitivity`. |
 | `input.invert_mouse` | `false` | `HALO_MOUSE_INVERT=1` sets `true` | `true`: the vertical mouse aim is inverted. |
@@ -715,11 +719,20 @@ GAME joins only with the correct password. The invite link of the game joins
 it without the password. The host keeps the password only while the game
 runs.
 
-In the Server Browser, select a game to join it. The game joins the invite
-of the game, as for a link. When it reaches the host, it opens the lobby.
-If it cannot reach the host in 30 seconds, it marks the game FAILED. A game
-that is full or starting shows CLOSED. REFRESH asks the hosts for their
-listings again.
+In the Server Browser, as in Custom Edition's, a click selects a game
+(outlined in yellow), and a click on the selected game, a double click, A,
+Enter or JOIN joins it. The game joins the invite of the game, as for a
+link. When it reaches the host, it opens the lobby. If it cannot reach the
+host in 30 seconds, it marks the game FAILED.
+
+The PING column shows the round trip to each host in milliseconds. The
+browser times it as a join would reach the host: it makes the tunnel with
+the listing's invite, keeps the shortest of three pings, and closes the
+tunnel again. It times a few hosts at once, each again every two minutes
+and on REFRESH. Joining a host whose tunnel is open uses that tunnel. A
+game with a password, whose invite the listing hides, shows no ping, nor
+does a host not reached; a game that is full or starting then shows
+CLOSED. REFRESH also asks the hosts for their listings again.
 
 How it operates (`src/p2p_lobby.c`):
 
@@ -1166,6 +1179,9 @@ Other changes:
 | `rasterizer/rasterizer.c` | The 128 KB of vertices of the debug display of a model's vertices are static, not on the stack: the compiler inlines the function in `render_model`, and the Windows build probed the stack a page at a time for every model drawn. |
 | `render/render.c` | The 3D view of each window is antialiased before the HUD is drawn (`display.anti_aliasing`). |
 | `interface/hud.c` | In multiplayer, players' names are drawn above their heads (`display.player_names`, `display.player_name_scale`). |
+| `interface/hud.c` | The seconds left on a player's powerups (`display.powerup_timers`, `game/powerup_timers.c`). |
+| `interface/progress_bar.c` | The loading screen is made by the CPU (`game/loading_screen.c`) and put over the back buffer (`src/d3d8_gl.c`): the Xbox drew it from its front buffer, through a texture made from that buffer's address, with no vertex shader, which the port's Direct3D does not have. |
+| `game/game.c` | A level's load holds the loading screen for `display.loading_screen_min_seconds`. |
 | `rasterizer/rasterizer_text.c`, `text/draw_string.c` | Text is drawn from an atlas of the fonts' glyphs, rasterized at the resolution the game draws at (`src/text_hires.c`), when the font has every character of the string. Text can be drawn scaled about a point (`rasterizer_text_set_scale`), as the players' names are. Each glyph's advance is centred on the font tag character's, so the layout is the same, and a glyph is cut at a text box only where the font tag's character visibly was. |
 | `interface/first_person_weapons.c` | The first-person hands are drawn with the unit's shield modifier shader, as its body is (`display.viewmodel_shield`). |
 | `render/render_objects.c`, `objects/objects.c` | In first person, your own body is drawn from the waist down with the pose `first_person_legs.c` makes (`display.first_person_legs`); the waist it found and the mesh `object_mesh.c` read are forgotten on a new map. |
@@ -1205,3 +1221,10 @@ each of the browser's frames, the cache thread starts at a function of
 `CreateThread`'s type, `debug.txt`'s lines go to the page's log) and the
 declarations given their definitions' types, which WebAssembly needs, are
 listed in "Game source changes" in [../web/README.md](../web/README.md).
+
+
+### OpenCE-Touch optional display and privacy controls
+
+Video Setup > Extra Display exposes `display.powerup_timers` (false), `display.loading_screen_min_seconds` (0), `display.far_clip_distance` (1024, stock; up to 10000), and Android `display.texture_decode` (auto/gpu/cpu). Their environment variables are `HALO_POWERUP_TIMERS`, `HALO_LOADING_SCREEN_MIN_SECONDS`, `HALO_FAR_CLIP_DISTANCE`, `HALO_TEXTURE_DECODE`. Texture decoding changes require a restart. Auto selects CPU decoding on Adreno; other GPUs use supported GPU decoding or the existing software fallback. More draw distance or CPU decoding can use more GPU time/memory. Network loads never acquire a display delay.
+
+Network Setup > Privacy uses this fork's existing public-listing, default-host-listing, clipboard, UPnP, update and voice settings. No Chupathingy-only reporting service is introduced. Save with OK; Cancel discards pending changes.

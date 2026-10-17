@@ -680,6 +680,9 @@ struct widget_instance;
 #include "text/unicode.h"
 #include "ui_widget.h"
 
+/* port: server-browser ping colours (port/linux/game/menu_functions.c) */
+boolean pc_menu_text_color(struct widget_instance *widget, real_argb_color *color);
+
 /* ---------- constants */
 
 enum
@@ -2138,7 +2141,8 @@ boolean main_menu_screen_is_active(
 {
 	if (we_are_at_the_main_menu == TRUE &&
 		widget_globals.active_widgets[0] &&
-		strcmp(widget_globals.active_widgets[0]->name, "the_main_menu") == 0)
+		(strcmp(widget_globals.active_widgets[0]->name, "the_main_menu") == 0 ||
+		strcmp(widget_globals.active_widgets[0]->name, "main_menu") == 0))
 	{
 		return TRUE;
 	}
@@ -2909,11 +2913,15 @@ boolean widget_event_function_list_widget_goto_previous_item(
 	return TRUE;
 }
 
+void map_screen_close(void);
+
 void ui_widgets_close_all(
 	void)
 {
 	long local_player_index;
 
+	/* The overlay must not outlive the menu tags or its list instance. */
+	map_screen_close();
 	/* port: the virtual keyboard goes with the widgets (while the widget
 	whose text it edits is still there): left open, it drew on after a game
 	loaded, with the menu map's font, which the game's tags no longer have
@@ -5332,6 +5340,8 @@ static void widget_instance_render_text_box(
 			color_alpha = color.alpha;
 		}
 	}
+	/* port: a colour of the port's for the text (its alpha the box's) */
+	pc_menu_text_color(widget, &color);
 	color.alpha = alpha_modifier * color_alpha;
 	if (TEST_FLAG(definition->text_box_flags, _text_box_flashing_text_bit))
 	{
@@ -5615,7 +5625,7 @@ void menu_functions_text_box_drawn(struct widget_instance *widget, rectangle2d c
 
 The menus were made for a controller: the d-pad moves the focus through a
 screen's items and A activates the focused one. With the mouse
-(port/linux/include/halo_ui_pointer.h) the item under the pointer takes the
+(port/shared/include/halo_ui_pointer.h) the item under the pointer takes the
 focus, a left click presses A on it (on a spinner list, left or right by the
 half clicked), a right click presses B and the wheel the d-pad. The items and
 where they are drawn are noted while the menus draw (ui_mouse_note_target),
@@ -5623,6 +5633,8 @@ for the next frame's processing (ui_widgets_process_mouse), which forgets
 them: widgets can be deleted from then on. */
 
 #define UI_MOUSE_MAXIMUM_TARGETS 96
+/* how far around a value's arrows a click still steps it */
+#define UI_MOUSE_ARROW_MARGIN 4
 
 enum ui_mouse_target_kind
 {
@@ -5688,6 +5700,10 @@ static boolean ui_mouse_click_pending = FALSE;
 then doesn't scroll on at its end, which the pointer, moving, would make it
 do every frame (menu_functions.c) */
 static boolean ui_mouse_focused_last = FALSE;
+/* whether the pointer passing over a widget moved the focus last, not a
+click (or the d-pad): the server browser's game stays chosen
+(menu_functions.c) */
+static boolean ui_mouse_hovered_last = FALSE;
 static short ui_mouse_hover_x, ui_mouse_hover_y;
 static short ui_mouse_click_x, ui_mouse_click_y;
 /* whether the latest pointer read was the touchscreen: the taller legend
@@ -6040,6 +6056,37 @@ static void ui_mouse_note_slot_band(
 	return;
 }
 
+/* a value's tap area: its box, and its arrows (drawn as
+widget_instance_render_spinner_list does: the left one beside a wider
+box's extra items) with UI_MOUSE_ARROW_MARGIN around them */
+static void ui_mouse_value_bounds(
+	struct ui_widget_definition const *definition,
+	point2d offset,
+	rectangle2d *bounds)
+{
+	rectangle2d arrows[2];
+	short index;
+
+	arrows[0] = definition->list_header_bounds;
+	arrows[1] = definition->list_footer_bounds;
+	if (spinner_string_list_extra_count(definition->text_label_string_list.index))
+	{
+		arrows[0].x0 -= SPINNER_EXTRA_WIDTH;
+		arrows[0].x1 -= SPINNER_EXTRA_WIDTH;
+	}
+	for (index = 0; index < 2; index++)
+	{
+		if ((index ? definition->list_footer_bitmap.index : definition->list_header_bitmap.index) == NONE)
+			continue;
+		bounds->x0 = MIN(bounds->x0, (short)(arrows[index].x0 + offset.x - UI_MOUSE_ARROW_MARGIN));
+		bounds->x1 = MAX(bounds->x1, (short)(arrows[index].x1 + offset.x + UI_MOUSE_ARROW_MARGIN));
+		bounds->y0 = MIN(bounds->y0, (short)(arrows[index].y0 + offset.y - UI_MOUSE_ARROW_MARGIN));
+		bounds->y1 = MAX(bounds->y1, (short)(arrows[index].y1 + offset.y + UI_MOUSE_ARROW_MARGIN));
+	}
+
+	return;
+}
+
 /* notes a widget as a tap target of this frame, if it is one: an item,
 a value, a list slot, or a legend button (kept in parts that
 ui_mouse_fit_button_targets settles into the tap area); a list showing
@@ -6140,11 +6187,13 @@ static void ui_mouse_note_target(
 	}
 	target = &ui_mouse_targets[ui_mouse_target_count++];
 	target->widget = widget;
-	target->bounds = bounds;
 	target->kind = kind;
 	target->button_index = button_index;
 	target->split_x = (bounds.x0 + bounds.x1) / 2;
 	target->split_y = (bounds.y0 + bounds.y1) / 2;
+	if (kind == _ui_mouse_target_value)
+		ui_mouse_value_bounds(definition, offset, &bounds);
+	target->bounds = bounds;
 	target->icon_bounds = icon_bounds;
 	target->label = target_label;
 	target->label_bounds = target_label_bounds;
@@ -6236,7 +6285,8 @@ static void ui_mouse_widen_values(
 
 		if (value->kind != _ui_mouse_target_value)
 			continue;
-		value->split_x = (box->x0 + box->x1) / 2;
+		/* (split_x stays the box's middle, as noted: the arrows' area is
+		noted with it) */
 		value->split_y = (box->y0 + box->y1) / 2;
 		left = MAX(left, (short)(-(screen_width - 640) / 2));
 		right = MIN(right, (short)(640 + (screen_width - 640) / 2));
@@ -6458,6 +6508,14 @@ boolean ui_widget_port_pointer_focused(
 	return ui_mouse_focused_last;
 }
 
+/* port: whether the pointer passing over a widget, not a click or the
+d-pad, moved the menus' focus last (menu_functions.c's server browser) */
+boolean ui_widget_port_hover_focused(
+	void)
+{
+	return ui_mouse_hovered_last;
+}
+
 /* the d-pad buttons that step a widget back and forward */
 static void ui_mouse_list_directions(
 	struct widget_instance *widget,
@@ -6660,6 +6718,13 @@ static boolean ui_mouse_menus_active(
 	return virtual_keyboard_active() || ui_mouse_menu() != NULL || game_engine_showing_postgame();
 }
 
+#ifdef HALO_ANDROID
+#include "../../port/android/guest/runtime/guest_host.h"
+#endif
+#include "ui_widget_porting.h"
+
+/* the pointer's motion, clicks and wheel since the last frame, as the first
+player's controller events */
 /* port: a row of a list to choose from (the PC version's menus' lists of
 gametypes, maps, profiles, levels and games, and the port's of mods:
 port/assets/menus) */
@@ -6731,54 +6796,25 @@ void ui_widget_port_post_button(
 	return;
 }
 
-/* logs a tap while the virtual keyboard is up: the key or legend that took it */
-static void ui_debug_log_keyboard_tap(
-	short x,
-	short y,
-	long hit)
-{
-	rectangle2d rectangles[UI_DEBUG_KEYBOARD_RECTANGLES];
-	long count = virtual_keyboard_target_rectangles(rectangles, UI_DEBUG_KEYBOARD_RECTANGLES);
+/* port: DamnationCE map picker; shares the existing pointer and pad input. */
+boolean map_screen_active(void);
+void map_screen_process(void);
+void map_screen_render(void);
+void map_screen_pointer(struct halo_ui_pointer const *pointer);
 
-	if (hit == NONE || hit >= count)
-	{
-		platform_log("touch targets: tap at %d,%d hit no keyboard key", x, y);
-	}
-	else
-	{
-		platform_log("touch targets: tap at %d,%d hit keyboard %s %ld [%d,%d,%d,%d]", x, y,
-			hit == count - 2 ? "BACK legend" : hit == count - 1 ? "ENTER legend" : "key",
-			hit, rectangles[hit].x0, rectangles[hit].y0, rectangles[hit].x1, rectangles[hit].y1);
-	}
-
-	return;
-}
-
-/* turns the pointer's motion, clicks and wheel since the last frame into the
-first player's controller events; while the virtual keyboard is up it gets
-the clicks and the menu behind gets nothing; a touch drag stops at the list's
-ends and skips settings; the desktop wheel wraps as the d-pad does; it
-records whether the pointer read is the touchscreen because the legends'
-taller tap areas are for a finger only; with debug.touch_targets on it also
-notes the finger-down and tap points for the debug view, and logs each tap: a
-menu click where it is resolved, a keyboard click where it is taken; a click
-on the band beside a list's slots steps the list by one; a PC list's row is
-selected by its first click and used by a click on the selected row; it
-forgets the frame's targets at the end, so that the next frame's render notes
-and settles them anew */
 static void ui_widgets_process_mouse(
 	void)
 {
 	struct halo_ui_pointer pointer;
 	struct ui_mouse_target *target;
 	short controller_index = 0;
-	boolean pointer_active;
-	boolean keyboard_active;
-
+	int pointer_active;
+#ifdef HALO_ANDROID
+	ui_porting_prepare();
+#endif
+	pointer_active = halo_ui_pointer_update(ui_mouse_menus_active() || virtual_keyboard_active(), &pointer);
 	ui_debug_frame++;
-	pointer_active = halo_ui_pointer_update(ui_mouse_menus_active(), &pointer) != 0;
-	if (pointer_active)
-		ui_mouse_pointer_is_touch = pointer.touch != 0;
+	if (pointer_active) ui_mouse_pointer_is_touch = pointer.touch != 0;
 	if (pointer_active && ui_debug_targets_enabled())
 	{
 		if (pointer.downs)
@@ -6789,18 +6825,25 @@ static void ui_widgets_process_mouse(
 			ui_debug_click_frame = ui_debug_frame;
 		}
 	}
-	/* the virtual keyboard takes the pointer's clicks itself; a click that
-	closes it (Done) is not also a click on the menu behind */
-	keyboard_active = virtual_keyboard_active();
-	if (pointer_active && keyboard_active && pointer.left_clicks)
+	if (pointer_active && virtual_keyboard_active())
 	{
-		long hit;
-
-		virtual_keyboard_click(pointer.click_x, pointer.click_y, &hit);
-		if (ui_debug_targets_enabled())
-			ui_debug_log_keyboard_tap(pointer.click_x, pointer.click_y, hit);
+		extern void virtual_keyboard_pointer(short x, short y, int select, int cancel);
+		if (pointer.moved || pointer.left_clicks || pointer.right_clicks)
+			virtual_keyboard_pointer(pointer.left_clicks ? pointer.click_x : pointer.x,
+				pointer.left_clicks ? pointer.click_y : pointer.y,
+				pointer.left_clicks != 0, pointer.right_clicks != 0);
+		/* The keyboard may close above; never also click the screen below it. */
+		pointer_active = 0;
 	}
-	if (!pointer_active || keyboard_active)
+
+	if (pointer_active && map_screen_active())
+	{
+		map_screen_pointer(&pointer);
+		pointer_active = 0;
+	}
+	if (!pointer_active ||
+		virtual_keyboard_active())
+
 	{
 		ui_mouse_press_count = 0;
 		ui_mouse_hover_pending = FALSE;
@@ -6808,6 +6851,26 @@ static void ui_widgets_process_mouse(
 	}
 	else
 	{
+#ifdef HALO_ANDROID
+        if (ui_porting_pointer(&pointer)) {
+            ui_mouse_press_count = 0;
+            ui_mouse_hover_pending = ui_mouse_click_pending = FALSE;
+            ui_mouse_target_count = 0;
+            return;
+        }
+        /* Screen-edge taps move the focused menu list without activating it.
+           Use the list's own axes for both mission carousels and option lists. */
+        if (pointer.left_clicks && pointer.side_step &&
+            !ui_mouse_target_at(pointer.click_x, pointer.click_y)) {
+            struct widget_instance *list = ui_mouse_wheel_widget(ui_mouse_menu(), TRUE);
+            if (list) {
+                short back, forward;
+                ui_mouse_list_directions(list, &back, &forward);
+                ui_mouse_press(pointer.side_step < 0 ? back : forward);
+                pointer.left_clicks = 0;
+            }
+        }
+#endif
 		if (pointer.moved)
 		{
 			ui_mouse_hover_pending = TRUE;
@@ -6872,10 +6935,10 @@ static void ui_widgets_process_mouse(
 				{
 				case _ui_mouse_target_item:
 				case _ui_mouse_target_value:
-					/* (a selection list's row is chosen by a click, not
-					by passing over it on the way to its buttons) */
-					if (!ui_mouse_selection_row(target->widget))
-						ui_mouse_give_focus(target->widget);
+					/* (a selection list's row too, as the main menu's
+					items: the row under the pointer is the one chosen) */
+					ui_mouse_give_focus(target->widget);
+					ui_mouse_hovered_last = TRUE;
 					break;
 				case _ui_mouse_target_list_slot:
 					ui_mouse_step_list_to_slot(target->widget);
@@ -6892,6 +6955,7 @@ static void ui_widgets_process_mouse(
 		if (!ui_mouse_press_count && ui_mouse_click_pending)
 		{
 			ui_mouse_click_pending = FALSE;
+			ui_mouse_hovered_last = FALSE;
 			target = ui_mouse_target_at(ui_mouse_click_x, ui_mouse_click_y);
 			if (ui_debug_targets_enabled())
 				ui_debug_log_click(ui_mouse_click_x, ui_mouse_click_y, target, ui_debug_frame - ui_debug_click_frame);
@@ -6995,6 +7059,12 @@ static void widget_instance_render_recursive(
 	struct bitmap_data *custom_edition_picture;
 	short frame_index;
 
+#ifdef HALO_ANDROID
+    struct ui_widget_definition adjusted_definition;
+    point2d unscaled_offset;
+#endif
+
+
 	if (!use_nifty_plasma_fx &&
 		TEST_FLAG(definition->flags, _widget_always_render_with_nifty_fx_bit))
 	{
@@ -7002,6 +7072,10 @@ static void widget_instance_render_recursive(
 	}
 	offset.x += widget->horizontal_offset;
 	offset.y += widget->vertical_offset;
+#ifdef HALO_ANDROID
+    unscaled_offset = offset;
+    if (!ui_porting_adjust_widget(widget, &definition, &adjusted_definition, &offset)) return;
+#endif
 	for (input_index = 0;
 		input_index < definition->game_data_inputs.count;
 		input_index++)
@@ -7015,13 +7089,19 @@ static void widget_instance_render_recursive(
 	}
 	if (!widget->visible)
 		return;
+#ifdef HALO_ANDROID
+    if (ui_porting_context && (ui_porting_menu.page || ui_porting_menu.editing) &&
+        ui_mouse_widget_is_item(widget)) return;
+#endif
 	ui_mouse_note_target(widget, definition, offset);
+
 	/* port: a Custom Edition map's picture, drawn over the whole widget, or
 	the unknown level's frame for a map without one
 	(port/linux/game/custom_edition_maps.c) */
 	frame_index = widget->animation.current_frame_index;
 	custom_edition_picture = custom_edition_maps_picture(definition->background_bitmap.index, &frame_index);
 	bitmap = custom_edition_picture ? custom_edition_picture : bitmap_group_get_bitmap_from_sequence(
+
 		definition->background_bitmap.index,
 		0,
 		frame_index);
@@ -7144,6 +7224,16 @@ static void widget_instance_render_recursive(
 	switch (widget->type)
 	{
 	case _ui_widget_type_text_box:
+#ifdef HALO_ANDROID
+        if (ui_porting_context == 2 && !ui_porting_menu.page && widget->parent) {
+            rasterizer_text_set_scale(1.12f, definition->bounds.x0+offset.x,
+                definition->bounds.y0+offset.y);
+            adjusted_definition.bounds.x1 = definition->bounds.x0+
+                (definition->bounds.x1-definition->bounds.x0)*100/112;
+            adjusted_definition.bounds.y1 = definition->bounds.y0+
+                (definition->bounds.y1-definition->bounds.y0)*100/112;
+        }
+#endif
 		widget_instance_render_text_box(
 			widget,
 			definition,
@@ -7162,6 +7252,9 @@ static void widget_instance_render_recursive(
 			text_bounds.y0 += definition->vertical_offset;
 			menu_functions_text_box_drawn(widget, &text_bounds);
 		}
+#ifdef HALO_ANDROID
+        rasterizer_text_set_scale(1.0f, 0.0f, 0.0f);
+#endif
 		break;
 
 	case _ui_widget_type_spinner_list:
@@ -7194,6 +7287,9 @@ static void widget_instance_render_recursive(
 	}
 	if (render_children)
 	{
+#ifdef HALO_ANDROID
+        offset = unscaled_offset;
+#endif
 		for (child = widget->child; child; child = child->next)
 		{
 			focus = child == widget->focused_child;
@@ -7302,6 +7398,11 @@ void render_ui_widgets(
 		local_player_index == NONE ? 0 : local_player_index;
 	if (bink_playback_ui_rendering_inhibited())
 		return;
+	if (map_screen_active())
+	{
+		map_screen_render();
+		return;
+	}
 	if (!virtual_keyboard_active())
 	{
 		local_player_index = PIN(
@@ -7362,6 +7463,9 @@ void render_ui_widgets(
 					TRUE,
 					FALSE);
 				ui_mouse_noting_targets = FALSE;
+#ifdef HALO_ANDROID
+                ui_porting_render(widget, &bounds);
+#endif
 				if (widget_globals.debug_show_path)
 				{
 					real_argb_color color = { 1.0f, 1.0f, 1.0f, 1.0f };
@@ -7711,7 +7815,18 @@ static void widget_instance_process_one_event_recursive(
 {
 	boolean event_handled = FALSE;
 	boolean widget_deleted = FALSE;
+
+#ifdef HALO_ANDROID
+    if (!widget->parent && ui_porting_context && ui_porting_menu.page) {
+        *return_widget_deleted = FALSE;
+        if (event->type == _event_type_button && event->data.button.value == 1 &&
+            event->data.button.index == _widget_event_b_button)
+            host_porting_action(ui_porting_menu.revision, 90, 0);
+        return;
+    }
+#endif
 	boolean event_for_this_widget = widget_takes_events_of_controller(widget, event->controller_index);
+
 	long audio_feedback = _ui_audio_feedback_none;
 
 	match_assert(
@@ -7723,6 +7838,7 @@ static void widget_instance_process_one_event_recursive(
 		event->data.button.index <= _widget_event_dpad_right)
 	{
 		ui_mouse_focused_last = FALSE;
+		ui_mouse_hovered_last = FALSE;
 	}
 	if (event->type == _event_type_button &&
 		event->data.button.value > 1 &&
@@ -8415,7 +8531,7 @@ static boolean ui_check_for_pause_game(
 		}
 	}
 	/* This runs once a frame, several frames per tick on the native builds
-	(port/linux/game/render_interpolation.c): count the lock down in 30 Hz
+	(port/shared/game/render_interpolation.c): count the lock down in 30 Hz
 	ticks of real time, not in frames. */
 	{
 		static real leftover_ticks = 0.f;
@@ -8447,6 +8563,11 @@ void process_ui_widgets(
 		widget_globals.initialized);
 	widget_globals.current_system_milliseconds = system_milliseconds();
 	ui_widgets_process_mouse();
+	if (map_screen_active())
+	{
+		map_screen_process();
+		return;
+	}
 	if (ui_widget_port_press_controller != NONE)
 	{
 		event_manager_post_button(ui_widget_port_press_controller, ui_widget_port_press_button);
@@ -8638,3 +8759,17 @@ void process_ui_widgets(
 
 	return;
 }
+
+/* port: the map picker uses the same menu stack as native list selection. */
+boolean ui_widget_port_open_from_top(char const *name)
+{
+	struct widget_instance *top = widget_globals.active_widgets[0];
+	return ui_widget_load_by_name_or_tag(name, NONE, NULL, 0,
+		top ? widget_instance_get_topmost_parent(top)->definition_tag_index : NONE, NONE, NONE) != NULL;
+}
+void ui_widget_port_go_back_from_top(void)
+{
+	if (widget_globals.active_widgets[0])
+		widget_instance_go_back_to_previous(widget_globals.active_widgets[0]);
+}
+struct widget_instance *ui_widget_port_top(void) { return widget_globals.active_widgets[0]; }

@@ -1,5 +1,53 @@
 # Halo: Combat Evolved for Linux, Windows, Android and the web
 
+> **About this fork:** OpenCE-Touch adds customizable Android touchscreen controls,
+> swipe aiming, and direct touch navigation for menus and the profile keyboard.
+> The fork-specific changes were coded with AI (OpenAI Codex); the original OpenCE
+> project and its contributors provide the underlying game port.
+> Touch builds are on the [`touch-controls`](https://github.com/Jantam11/OpenCE-Touch/tree/touch-controls) branch;
+> the download links below point to upstream OpenCE releases.
+
+Get the Android touch version from this fork's [Releases](https://github.com/Jantam11/OpenCE-Touch/releases)
+([latest APK](https://github.com/Jantam11/OpenCE-Touch/releases/latest/download/OpenCE-Touch.apk)).
+
+## 0.6.0-touch additions
+
+Settings survive app restarts and old duplicated configuration sections are repaired. **OPTIONS → General settings → Edit in-game HUD** moves the weapons, health and radar panels; Save and Android Back keep the layout. Touch layout imports/exports leave the HUD layout alone.
+
+**Settings → Video Setup → Extra Display** contains powerup timers (off), loading-screen minimum time (no extra wait), draw distance (**Stock (1024)**) and Android texture decoding (**Auto**, with the Adreno workaround). **Settings → Network Setup → Privacy** groups public listings, clipboard invites, UPnP requests, voice and update checks. Save native settings with **OK**. No match-stat switches are added because this fork has no such reporting service.
+
+New adaptations credit [ChupathingyCE/MrMilenko](https://github.com/ChupathingyCE/chupathingyce) (fullscreen, textures, timers/loading screen, draw distance and privacy-page approach), [FulGerNet/theLlamaNet](https://github.com/FulGerNet/halo-ce-android) (HUD editing), and [xshxdex98/DamnationCE](https://github.com/xshxdex98/DamnationCE) (setting arrows, server pings and selection). OpenCE provides the upstream fixes and resource packs. Multiplayer uses **protocol 29**. MCC support is not included in this release.
+
+## Mobile feature credits
+
+- [theLlamaNet / FulGer — halo-ce-android](https://github.com/theLlamaNet/halo-ce-android): gyroscope aiming, rumble, fire-button drag aiming, Halo-style vector icons, portable layouts, Porting options, FOV/FPS settings, single-player cheats, free camera and encrypted relay fallback. Adapted to retain this fork's SDL virtual gamepad and working menu/profile-keyboard taps.
+- [JoshRob297 — halo-ce-touch](https://github.com/JoshRob297/halo-ce-touch): Bink movie playback from [his clean Bink branch](https://github.com/JoshRob297/halo-ce-touch/tree/bink-on-main), plus dedicated-server map/variant rotation, time limits and restart/join fixes. His touch work also builds on theLlamaNet's controls.
+- [FFmpeg](https://ffmpeg.org/): open-source Bink video/audio decoding, built from pinned LGPL source. Every Android release includes its license, exact source and relinking materials in the packaged build.
+
+Open **OPTIONS** or the native **Porting options** menu to change settings. Layouts can be exported/imported as `.halolayout`; imports from the two credited forks are supported. Gyroscope and vibration require suitable phone hardware. Cheats apply to single-player; startup choices take effect when a campaign starts after restarting the app.
+
+**Disc videos:** new installations extract `bink/` alongside `maps/`. Existing players can select **OPTIONS → Import disc movies** and choose their own Halo `.iso`/`.xiso`; this copies movies without replacing maps or profiles. Intro, credits and idle attract-demo videos play with audio, and a tap skips playback. No game videos are bundled in the APK. Other in-engine cutscenes still use the game's renderer.
+
+## Update in 0.5.5-touch
+
+Custom Edition map sharing, browser/native Internet play, rendering improvements, optional first-person legs and shield effects, co-op/lobby fixes, and DamnationCE's touchscreen selection fix. Credits and details are in the [changelog](CHANGELOG.md). Multiplayer uses **protocol 29**; older clients must update.
+
+## Android fixes in 0.5.1-touch
+
+- Main-screen Quit asks for confirmation and closes the app when confirmed; Back cancels. Porting options is a separate row below Quit. The native pause menu keeps its normal Save and Quit behavior.
+- Targeted renderer fix adapted from [kirklandsig's OpenCE PR #165](https://github.com/OpenCommunityEdition/OpenCE/pull/165), avoiding an Android/Mali buffer-copy race that produces stretched geometry or missing world surfaces. Android exit handling adapted from [FernandolDev's PR #183](https://github.com/OpenCommunityEdition/OpenCE/pull/183).
+- The `touch-controls` branch builds/tests and packages Android only. Phone gameplay still needs confirmation using your own game data.
+
+## Fork features added on 2026-10-08
+
+- [ChupathingyCE](https://github.com/ChupathingyCE/chupathingyce): persistent shader warm-up/cache, sound lifetime and stream-underrun fixes, less profile/map I/O in menus, profile keyboard Enter handoff, profile-name reuse, paused multiplayer input/crouch fixes, finer mouse sensitivity and independent Sinc/Linear audio resampling. Desktop [playlist server tools](server/README.md) add unattended hosting, map/game-type rotation and idle/empty-game recovery using OpenCE networking.
+- [DamnationCE](https://github.com/xshxdex98/DamnationCE): a map picker with stock/custom categories, pictures, list/grid views, co-op selection and difficulty. Optional **Glassed**, **Cairo** (Halo 2 inspired) and **Vanilla** menu themes. **Default remains selected**; choose another in **Settings → Video Setup → Menu Theme**, save, then restart. Themes also have a Menus selector. `display.map_browser=false` restores the original map list.
+- [fqlx/OpenCE](https://github.com/fqlx/OpenCE): an optional compact touchscreen preset adapted from its browser controls to our Android virtual gamepad. Choose **OPTIONS → Layout presets → fqlx compact**. Export your current layout first if you want to keep it. Preset controls remain editable and use the existing `.halolayout` export/import format; your current layout is not changed by upgrading.
+
+The original touch/gyro/rumble, single-player options, layout import/export and disc-movie features remain in place. The shader cache is stored with saves (up to 48 MiB); deleting `shader_cache.bin` clears it. Audio defaults to Sinc; Linear is an optional lower-cost resampler. The server tools do not add Delta online accounts/statistics. No community map pack or downloader is bundled.
+
+See [integration notes](INTEGRATION_NOTES.md) for source revisions, validation and the community-map proposal. Font notices ship in the packaged builds and Android assets. These changes need phone gameplay and live-server checks with your own game files before a release is considered verified on hardware.
+
 [![Join our Discord](https://invidget.switchblade.xyz/9gqcHyr5km)](https://discord.gg/9gqcHyr5km)
 
 This project is a port of the Halo: Combat Evolved decompilation to Linux,

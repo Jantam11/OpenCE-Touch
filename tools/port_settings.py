@@ -67,6 +67,8 @@ SCREENS = {
              "The window's size: 4:3, then 16:10, 16:9 and 21:9\n(its edges can also be dragged).", "desktop"),
             ("RESOLUTION SCALING:", "display.resolution_scaling", [("NATIVE", "native"), ("ORIGINAL", "original")],
              "Native draws at the resolution; Original draws\nthe Xbox's 640x480 and scales it up.", "desktop web"),
+            ("MENU THEME:", "display.theme", [("DEFAULT", "default"), ("GLASSED", "glassed"), ("VANILLA", "vanilla"), ("CAIRO", "cairo")],
+             "Optional menu appearance. Restart the game to apply.\nDefault keeps the OpenCE menus.", None),
             ("V-SYNC:", "display.vsync", ON_OFF,
              "Wait for the display between frames, so that the\npicture never tears.", None),
             ("FRAME RATE LIMIT:", "display.max_fps",
@@ -136,6 +138,8 @@ SCREENS = {
             ("MUSIC VOLUME:", "audio.music_volume", VOLUMES, "The music's volume.", None),
             ("EFFECTS VOLUME:", "audio.effects_volume", VOLUMES,
              "The volume of every other sound: effects and\nspeech.", None),
+            ("RESAMPLING:", "audio.resampling", [("SINC", "sinc"), ("LINEAR", "linear")],
+             "Sinc preserves the original sound band. Linear\nuses the older interpolation. Reverb is separate.", None),
             ("REVERB:", "audio.reverb", ON_OFF,
              "Echo sounds as the place you are in does, and\nmuffle those behind walls, as the Xbox did.", None),
             ("SOUND:", "audio.enabled", ON_OFF,
@@ -260,6 +264,44 @@ SCREENS["network_setup/map_sharing"] = {
     ],
 }
 
+# Optional Android/display additions adapted from ChupathingyCE; privacy
+# categories follow its settings-screen pattern, using this fork's services.
+_video["categories"].append(("EXTRA DISPLAY:", "video_settings/extras",
+    "Powerup timers, loading-screen display time,\ndraw distance and Android texture decoding."))
+SCREENS["video_settings/extras"] = {
+    "screen": "extra_display_settings_screen", "header": _video["header"], "spacing": 30,
+    "rows": [
+        ("POWERUP TIMERS:", "display.powerup_timers", ON_OFF,
+         "Show seconds left on active powerups.\nOff keeps the original HUD.", None),
+        ("LOADING SCREEN:", "display.loading_screen_min_seconds",
+         [("NO EXTRA WAIT", "0")] + [(f"{n} SECONDS", str(n)) for n in (1,2,3,5,10)],
+         "Minimum loading-screen time in local games.\nZero adds no wait; network games never wait.", None),
+        ("DRAW DISTANCE:", "display.far_clip_distance",
+         [("STOCK (1024)", "1024"), ("2048", "2048"), ("4096", "4096"), ("8192", "8192"), ("10000", "10000")],
+         "Stock is the default. Longer distances help large\nmaps but can reduce performance. Fog still applies.", None),
+        ("TEXTURE DECODING:", "display.texture_decode",
+         [("AUTO", "auto"), ("GPU", "gpu"), ("CPU", "cpu")],
+         "Auto works around Adreno texture artifacts.\nRestart the app after changing this.", "android"),
+    ],
+}
+_network["categories"].append(("PRIVACY:", "network_setup/privacy",
+    "Public listings, clipboard invites, automatic\nrouter requests, voice and update checks."))
+SCREENS["network_setup/privacy"] = {
+    "screen": "privacy_settings_screen", "header": _network["header"], "spacing": 30,
+    "rows": [
+        ("PUBLIC GAME LIST:", "network.public_lobby", ON_OFF,
+         "List public hosted games and show public games.\nOff keeps invitations and local-network play.", None),
+        ("DEFAULT LISTING:", "network.host_public", [("PUBLIC", "true"), ("PRIVATE", "false")],
+         "Default for new Internet games. Server Setup\ncan change the listing for each game.", None),
+        *[row for row in _network["rows"] if row[1] in
+          {"network.join_from_clipboard", "network.allow_upnp", "update.auto"}],
+        ("VOICE CHAT:", "audio.voice_chat", [("OFF", "off"), ("PUSH TO TALK", "push_to_talk"), ("OPEN MIC", "open_mic")],
+         "Off closes voice chat. Push to talk opens the\nmicrophone only while its control is held.", None),
+    ],
+}
+_network["rows"] = [row for row in _network["rows"] if row[1] not in
+    {"network.join_from_clipboard", "network.allow_upnp", "update.auto"}]
+
 # Controls Setup: the keyboard and mouse's actions, in groups (the order of
 # port/linux/game/menu_functions.c's table of them)
 CONTROL_GROUPS = ["MOVEMENT", "WEAPONS", "ACTIONS"]
@@ -349,7 +391,7 @@ def _screen(folder: str, spec: dict, rows: list, list_inputs: list, list_handler
                                           ("bitmap", header_bitmap)], [])
     lines += _widget(f"{base}/help", [("type", "text"), ("controller", 1), ("left", 68),
                                       ("top", spec.get("help_top", 350)), ("width", 482),
-                                      ("height", 60), ("string_list", f"{base}/help_strings"),
+                                      ("height", spec.get("help_height", 60)), ("string_list", f"{base}/help_strings"),
                                       ("font", "ui\\large_ui"), ("color", "#FFFFFFFF")], [])
     children = [f'<data input="{name}"/>' for name in list_inputs] + list_handlers
     # (each row: its widget, platform, and the place it is in, else the next)

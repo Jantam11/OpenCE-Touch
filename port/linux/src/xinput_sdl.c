@@ -42,6 +42,9 @@ drive the controller.
 #include "port_config.h"
 #include "touch_input.h"
 #include "halo_keyboard.h"
+#ifdef HALO_ANDROID
+void host_touch_rumble(unsigned int low, unsigned int high);
+#endif
 
 #include <SDL3/SDL.h>
 #include <math.h>
@@ -96,7 +99,7 @@ the touch controls (their swipe, gyroscope or stick: halo_linux_mouse_aiming,
 halo_linux_touch_aiming) */
 static Uint64 mouse_aimed_ms = 0;
 static Uint64 stick_aimed_ms = 0;
-#if defined(HALO_ANDROID) || defined(HALO_WEB)
+#if defined(HALO_ANDROID) && !defined(HALO_TOUCH_SDL_GAMEPAD)
 static Uint64 touch_aimed_ms = 0;
 #endif
 
@@ -158,7 +161,7 @@ int halo_linux_mouse_look(short gamepad_index, float *yaw, float *pitch)
 	return TRUE;
 }
 
-#if defined(HALO_ANDROID) || defined(HALO_WEB)
+#if defined(HALO_ANDROID) && !defined(HALO_TOUCH_SDL_GAMEPAD)
 /* the touch controls moved the player or the aim (halo_linux_touch_aiming) */
 static void touch_used(void)
 {
@@ -178,7 +181,7 @@ int halo_linux_touch_move(short controller_index, float *forward, float *strafe)
 	*strafe = 0.0f;
 	if (controller_index != 0)
 		return FALSE;
-#if defined(HALO_ANDROID) || defined(HALO_WEB)
+#if defined(HALO_ANDROID) && !defined(HALO_TOUCH_SDL_GAMEPAD)
 	if (!touch_input_move(forward, strafe))
 		return FALSE;
 	touch_used();
@@ -201,7 +204,7 @@ int halo_linux_touch_look(short gamepad_index, float *yaw, float *pitch, float *
 	*gyro_pitch = 0.0f;
 	if (gamepad_index != 0)
 		return FALSE;
-#if defined(HALO_ANDROID) || defined(HALO_WEB)
+#if defined(HALO_ANDROID) && !defined(HALO_TOUCH_SDL_GAMEPAD)
 	touch_input_look(0.0022f, yaw, pitch, gyro_yaw, gyro_pitch);
 	if (*yaw == 0.0f && *pitch == 0.0f && *gyro_yaw == 0.0f && *gyro_pitch == 0.0f)
 		return FALSE;
@@ -217,7 +220,7 @@ assist (input.touch_aim_assist false): no magnetism, as for the mouse
 (player_control.c), until a stick moves the aim again */
 int halo_linux_touch_aiming(short gamepad_index)
 {
-#if defined(HALO_ANDROID) || defined(HALO_WEB)
+#if defined(HALO_ANDROID) && !defined(HALO_TOUCH_SDL_GAMEPAD)
 	int aiming;
 
 	if (gamepad_index != 0 || touch_input_aim_assist())
@@ -293,6 +296,7 @@ arrows, which move about it, enter (Done, once let go of since it came up)
 and escape (cancel) */
 static BOOL text_typing;
 static BOOL text_typing_enter_armed;
+static BOOL text_typing_enter_blocked;
 /* (the on-screen keyboard's, and a menu's text field's: menu_functions.c) */
 static BOOL text_typing_keyboard, text_typing_field;
 
@@ -302,6 +306,8 @@ static void text_typing_update(void)
 
 	if (typing && !text_typing)
 		text_typing_enter_armed = FALSE;
+	if (!typing && text_typing)
+		text_typing_enter_blocked = TRUE;
 	text_typing = typing;
 }
 
@@ -309,6 +315,9 @@ void platform_text_typing(int typing)
 {
 	text_typing_keyboard = typing != 0;
 	text_typing_update();
+#ifdef HALO_ANDROID
+	SDL_SetHint("OPEN_CE_TOUCH_KEYBOARD", typing ? "1" : "0");
+#endif
 }
 
 void platform_text_field(int typing, int password)
@@ -337,6 +346,9 @@ static void typing_gamepad(const struct platform_input_state *input, XINPUT_GAME
 	else if (text_typing_enter_armed)
 		pad->wButtons |= XINPUT_GAMEPAD_START;
 	pad->bAnalogButtons[XINPUT_GAMEPAD_B] |= analog(k[SDL_SCANCODE_ESCAPE]);
+#ifdef HALO_ANDROID
+	pad->bAnalogButtons[XINPUT_GAMEPAD_B] |= analog(k[SDL_SCANCODE_AC_BACK]);
+#endif
 }
 
 static void keyboard_gamepad(const struct platform_input_state *input, XINPUT_GAMEPAD *pad)
@@ -345,6 +357,12 @@ static void keyboard_gamepad(const struct platform_input_state *input, XINPUT_GA
 	BOOL mouse = !input->mouse_released;
 	const unsigned char *m = input->mouse_buttons;
 	int x = 0, y = 0;
+	BOOL enter = k[SDL_SCANCODE_RETURN] || k[SDL_SCANCODE_KP_ENTER];
+
+	/* The Enter that finished typing must be released before it can
+	   activate the menu underneath the keyboard. */
+	if (!enter)
+		text_typing_enter_blocked = FALSE;
 
 	if (text_typing)
 	{
@@ -373,8 +391,8 @@ static void keyboard_gamepad(const struct platform_input_state *input, XINPUT_GA
 
 	/* (escape backs out, as backspace does: the pause menu's B resumes the
 	game, the main menu's asks to quit; Start would choose, as A does) */
-	pad->bAnalogButtons[XINPUT_GAMEPAD_A] |= analog(k[SDL_SCANCODE_SPACE] || k[SDL_SCANCODE_RETURN] ||
-		k[SDL_SCANCODE_KP_ENTER]);
+	pad->bAnalogButtons[XINPUT_GAMEPAD_A] |= analog(k[SDL_SCANCODE_SPACE] ||
+		(enter && !text_typing_enter_blocked));
 	pad->bAnalogButtons[XINPUT_GAMEPAD_B] |= analog(k[SDL_SCANCODE_ESCAPE] || k[SDL_SCANCODE_BACKSPACE] ||
 		(mouse && m[SDL_BUTTON_X1]));
 #ifdef HALO_ANDROID
@@ -737,19 +755,23 @@ static int sdl_gamepads(SDL_Gamepad *gamepads[PORT_COUNT])
 		recognised controllers take the first ports */
 		int pass;
 
-		for (pass = 0; pass < 2; pass++)
+		/* The touchscreen stays on player 1, including split-screen lobbies;
+		physical controllers follow it in their normal order. */
+		for (pass = 0; pass < 3; pass++)
 		{
 			for (index = 0; index < count && found < PORT_COUNT; index++)
 			{
 				SDL_Gamepad *gamepad = SDL_GetGamepadFromID(ids[index]);
 				SDL_GamepadType type;
 				BOOL recognised;
+				BOOL virtual_pad;
 
 				if (!gamepad)
 					continue;
 				type = SDL_GetGamepadType(gamepad);
 				recognised = type != SDL_GAMEPAD_TYPE_UNKNOWN && type != SDL_GAMEPAD_TYPE_STANDARD;
-				if (recognised == (pass == 0))
+				virtual_pad = SDL_IsJoystickVirtual(SDL_GetGamepadID(gamepad));
+				if (virtual_pad ? pass == 0 : pass == (recognised ? 1 : 2))
 					gamepads[found++] = gamepad;
 			}
 		}
@@ -797,6 +819,10 @@ static SDL_Gamepad *port_gamepad(SDL_Gamepad *gamepads[PORT_COUNT], int count, i
 {
 	if (count == 1)
 	{
+#ifdef HALO_ANDROID
+		if (SDL_IsJoystickVirtual(SDL_GetGamepadID(gamepads[0])))
+			return port == 0 ? gamepads[0] : NULL;
+#endif
 		BOOL split = pc_menu_split_players() != 0;
 
 		if (split != lone_gamepad_split && gamepad_idle(gamepads[0]))
@@ -1002,7 +1028,7 @@ DWORD WINAPI XInputGetState(HANDLE device, PXINPUT_STATE state)
 			sdl_gamepad_state(gamepads[0], &state->Gamepad);
 		test_input_gamepad(&state->Gamepad);
 		touch_input_gamepad(&state->Gamepad);
-#if defined(HALO_ANDROID) || defined(HALO_WEB)
+#if defined(HALO_ANDROID) && !defined(HALO_TOUCH_SDL_GAMEPAD)
 		touch_input_controls(&state->Gamepad, input.menus);
 #endif
 		if (abs(state->Gamepad.sThumbRX) > STICK_AIMING_DEFLECTION ||
@@ -1042,7 +1068,7 @@ DWORD WINAPI XInputSetState(HANDLE device, PXINPUT_FEEDBACK feedback)
 	/* the phone vibrates for the touch controls' player (in a browser, where
 	it can) */
 	if (port == 0)
-		touch_input_rumble(feedback->Rumble.wLeftMotorSpeed, feedback->Rumble.wRightMotorSpeed);
+		host_touch_rumble(feedback->Rumble.wLeftMotorSpeed, feedback->Rumble.wRightMotorSpeed);
 #endif
 	count = sdl_gamepads(gamepads);
 	if (port_gamepad(gamepads, count, port))
@@ -1084,3 +1110,6 @@ DWORD WINAPI XInputDebugGetKeystroke(PXINPUT_DEBUG_KEYSTROKE keystroke)
 	}
 	return ERROR_HANDLE_EOF;
 }
+
+/* OpenCE uses Xbox gamepad actions for the keyboard and native touch pad too. */
+int platform_input_scheme(void) { return 1; }

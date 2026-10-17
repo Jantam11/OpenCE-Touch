@@ -58,6 +58,8 @@ def main() -> int:
     parser.add_argument("config", choices=["debug", "release", "profile"])
     args = parser.parse_args()
 
+    if args.platform == "android":
+        run([sys.executable, "tools/build_android_bink.py"])
     configure = [sys.executable, "configure.py", "--portable"]
     if args.config == "release":
         configure.append("--release")
@@ -130,7 +132,10 @@ def main() -> int:
     shutil.copy2(ROOT / "port/third_party/miniupnpc/LICENSE", dist / "miniupnpc-LICENSE.txt")
     # the text's fonts (port/assets/fonts), embedded in every build, whose
     # SIL Open Font License asks each copy to carry it
-    shutil.copy2(ROOT / "port/assets/fonts/Overpass-OFL.txt", dist / "Overpass-OFL.txt")
+    for license in ("Overpass-OFL.txt", "Rajdhani-OFL.txt", "TitilliumWeb-OFL.txt"):
+        shutil.copy2(ROOT / "port/assets/fonts" / license, dist / license)
+    for license in ("OFL.txt", "KENNEY-CC0.txt"):
+        shutil.copy2(ROOT / "port/linux/ui/fonts" / license, dist / ("ui-font-" + license))
     # the menus' XML parser (port/third_party/expat), in every build, whose
     # MIT license asks copies to carry its notice
     shutil.copy2(ROOT / "port/third_party/expat/COPYING", dist / "expat-COPYING.txt")
@@ -141,6 +146,9 @@ def main() -> int:
     # (port/assets/icons/lucide, drawn into the menus' bitmaps), whose ISC
     # license asks copies to carry its notice
     shutil.copy2(ROOT / "port/assets/icons/lucide/LICENSE", dist / "lucide-LICENSE.txt")
+    if args.platform == "android":
+        shutil.copy2(ROOT / "build/android/FFmpeg-LGPL.txt", dist / "FFmpeg-LGPL.txt")
+        shutil.copy2(ROOT / "build/android/bink-relink.zip", dist / "bink-relink.zip")
     # internet play's MQTT brokers, a file beside the game (network.brokers_file;
     # Android's APK has its own copy)
     if args.platform != "android":

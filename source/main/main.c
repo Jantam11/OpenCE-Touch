@@ -1151,6 +1151,32 @@ static void screenshot_record(
 	return;
 }
 
+double config_real(char const *name);
+unsigned long config_changes(void);
+
+/* port: display.far_clip_distance, how far the world is drawn (1024 as on
+the Xbox, to 10000). It is a floor under the camera's far clip, applied each
+frame: the map's own value, a script or init.txt can raise the clip beyond it
+but not lower it below it, and it holds across map loads and joins. Render
+only; the game's state never reads it. The near clip stays as it was, and the
+fog (which can end the view sooner) still applies after this. */
+static real far_clip_distance_floor(
+	void)
+{
+	static unsigned long read_at = (unsigned long)-1;
+	static real distance = 1024.0f;
+
+	if (read_at != config_changes())
+	{
+		real value = (real)config_real("display.far_clip_distance");
+
+		read_at = config_changes();
+		distance = valid_real(value) ? PIN(value, 1024.0f, 10000.0f) : 1024.0f;
+	}
+
+	return distance;
+}
+
 void set_window_camera_values(
 	struct render_window *window,
 	struct observer_result const *observer)
@@ -1206,7 +1232,7 @@ void set_window_camera_values(
 
 	window->rasterizer_camera.mirrored = FALSE;
 	window->rasterizer_camera.z_near = rasterizer_globals.near_clip_distance;
-	window->rasterizer_camera.z_far = rasterizer_globals.far_clip_distance;
+	window->rasterizer_camera.z_far = MAX(rasterizer_globals.far_clip_distance, far_clip_distance_floor());
 	if (!debug_render_freeze)
 		window->render_camera = window->rasterizer_camera;
 
@@ -3513,6 +3539,9 @@ static boolean main_loop_iteration(
 		shell_idle();
 		event_manager_update();
 		telnet_console_process();
+#ifdef HALO_ANDROID
+		android_touch_cheats_update();
+#endif
 		profile_scope_exit(main_platform_events_section)
 
 		if (!shell_application_is_paused())
@@ -3561,6 +3590,8 @@ static boolean main_loop_iteration(
 			profile_scope(main_update_time_section, main_update_time();)
 			profile_scope_enter(main_ui_update_section)
 			process_ui_widgets();
+			/* port: optional unattended playlist host (server/src/dedicated.c). */
+			{ extern void dedicated_server_update(void); dedicated_server_update(); }
 			bink_playback_update();
 			profile_scope_exit(main_ui_update_section)
 

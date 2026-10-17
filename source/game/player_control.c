@@ -392,7 +392,7 @@ boolean controls_enable_crouch = FALSE;
 boolean controls_enable_doubled_spin = FALSE;
 boolean controls_swap_doubled_spin_state = FALSE;
 /* The native builds read input once a frame and draw several frames per
-30 Hz tick (port/linux/game/render_interpolation.c). The pitch autolevel and
+30 Hz tick (port/shared/game/render_interpolation.c). The pitch autolevel and
 limits were stepped once per input update, a tick on the Xbox, so they step
 by the ticks the frame lasted; an impulse applied from a tick steps by one. */
 static real player_control_angle_step_ticks = 1.f;
@@ -502,16 +502,25 @@ real player_control_get_field_of_view(
 			control->unit_index,
 			unit->unit.current_weapon_index);
 
+		real base_field_of_view = definition->unit.camera_field_of_view;
+#ifdef HALO_ANDROID
+		{
+			extern float host_touch_field_of_view(void);
+			base_field_of_view = PIN(base_field_of_view * host_touch_field_of_view()/70.0f,
+				DEGREES_TO_RADIANS(1.f), DEGREES_TO_RADIANS(90.f));
+		}
+#endif
+
 		if (weapon_index != NONE)
 		{
 			field_of_view = weapon_get_field_of_view(
 				weapon_index,
-				definition->unit.camera_field_of_view,
+				base_field_of_view,
 				control->zoom_level);
 		}
 		else
 		{
-			field_of_view = definition->unit.camera_field_of_view;
+			field_of_view = base_field_of_view;
 		}
 	}
 	return field_of_view;
@@ -1332,12 +1341,18 @@ static void get_local_player_input_blob(
 						input->facing_delta.pitch = facing_scale * look_delta.pitch;
 					}
 					{
-						/* direct mouse aim (port/linux/src/xinput_sdl.c) */
+						/* direct mouse aim (port/shared/src/xinput_sdl.c) */
 						extern int halo_linux_mouse_look(short gamepad_index, real *yaw, real *pitch);
 						real mouse_yaw;
 						real mouse_pitch;
 
-						if (halo_linux_mouse_look(gamepad_index, &mouse_yaw, &mouse_pitch))
+						/* Leave the shared, sensitivity-scaled delta for the free camera:
+						player input runs first and must not drain its swipe/gyro. */
+						if (
+#ifdef HALO_ANDROID
+							!director_flying_controls_active(local_player_index) &&
+#endif
+							halo_linux_mouse_look(gamepad_index, &mouse_yaw, &mouse_pitch))
 						{
 							if (player->unit_index != NONE && control->zoom_level != NONE)
 							{
@@ -1404,10 +1419,14 @@ static void get_local_player_input_blob(
 				{
 					struct biped_datum *biped = biped_try_and_get(player->unit_index);
 
+					/* (crouching takes a stick short of all the way; port: the
+					keyboard always moves all the way, so its crouch key
+					crouches at any speed, as Halo PC's does) */
 					if (biped &&
 						(controls_enable_crouch ||
 						TEST_FLAG(biped->biped.flags, _biped_airborne_bit) ||
-						magnitude_squared2d(&input->throttle) < 0.98f * 0.98f))
+						magnitude_squared2d(&input->throttle) < 0.98f * 0.98f ||
+						input_abstraction_port_crouch(gamepad_index)))
 					{
 						SET_FLAG(
 							input->unit_control_flags,

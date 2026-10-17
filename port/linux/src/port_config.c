@@ -104,6 +104,12 @@ static const struct config_setting config_settings[] =
 	{ "display.screen_width", _config_integer, "0", "HALO_SCREEN_WIDTH", _environment_value, _platform_android,
 		"Columns of the 480-line picture: 0 for the display's shape, 640 for the\n"
 		"Xbox's 4:3." },
+	{ "display.texture_decode", _config_string, "\"auto\"", "HALO_TEXTURE_DECODE", _environment_value,
+		_platform_android,
+		"Where the maps' compressed (DXT) textures are unpacked: \"gpu\" by the\n"
+		"graphics driver where it can, \"cpu\" by the game as they load (more\n"
+		"memory), or \"auto\": \"cpu\" on Adreno graphics, whose driver drew\n"
+		"them speckled, \"gpu\" on others." },
 	{ "display.vsync", _config_boolean, "true", "HALO_NO_VSYNC", _environment_set_is_false, _platform_all,
 		"Wait for the display between frames; false draws as fast as possible." },
 	{ "display.max_fps", _config_integer, "0", "HALO_MAX_FPS", _environment_value, _platform_desktop,
@@ -133,6 +139,10 @@ static const struct config_setting config_settings[] =
 	{ "display.viewmodel_visible", _config_boolean, "true", "HALO_VIEWMODEL_VISIBLE", _environment_value, _platform_all,
 		"Draw the first-person weapon, hands and what is attached to them.\n"
 		"Off, they are not drawn; firing, animation, sound and lights go on." },
+	{ "display.far_clip_distance", _config_real, "1024.0", "HALO_FAR_CLIP_DISTANCE", _environment_value, _platform_all,
+		"How far the world is drawn: 1024 as on the Xbox, up to 10000. Raise\n"
+		"it for large maps that cut off in the distance. Drawing only; the\n"
+		"game itself is unchanged. Fog can still end the view sooner." },
 	{ "display.high_res_hud", _config_boolean, "true", "HALO_HIGH_RES_HUD", _environment_value, _platform_all,
 		"Draw the HUD (meters, counters, panels, motion sensor, reticles,\n"
 		"waypoints, scopes) from the high-res assets (8x the maps' bitmaps);\n"
@@ -152,6 +162,12 @@ static const struct config_setting config_settings[] =
 	{ "display.menus", _config_string, "\"pc\"", "HALO_MENUS", _environment_value, _platform_all,
 		"The menus: \"pc\" for the PC version's main menu (port/assets/menus,\n"
 		"and a menus folder here for your own), \"xbox\" for the Xbox's." },
+	{ "display.theme", _config_string, "\"default\"", "HALO_THEME", _environment_value, _platform_all,
+		"Optional DamnationCE menu theme: default (unchanged OpenCE), glassed,\n"
+		"vanilla or cairo. Restart the game after changing it." },
+	{ "display.map_browser", _config_boolean, "true", "HALO_MAP_BROWSER", _environment_value, _platform_all,
+		"Use the DamnationCE map picker, with stock/custom categories and list\n"
+		"or grid view. False keeps the original map list." },
 	{ "display.player_names", _config_string, "\"all\"", "HALO_PLAYER_NAMES", _environment_value, _platform_all,
 		"In multiplayer, whose names are drawn above their heads: \"all\",\n"
 		"\"allies\", \"enemies\" or \"none\". An enemy's shows only within the\n"
@@ -161,6 +177,16 @@ static const struct config_setting config_settings[] =
 	{ "display.player_name_scale", _config_real, "1.0", "HALO_PLAYER_NAME_SCALE", _environment_value, _platform_all,
 		"How large the players' names are drawn: 1.0 three quarters of the size of\n"
 		"the HUD's text, 0.25 to 4." },
+	{ "display.powerup_timers", _config_boolean, "false", "HALO_POWERUP_TIMERS", _environment_value, _platform_all,
+		"Show the seconds left on your active camouflage, overshield and full\n"
+		"spectrum vision in a small line of the HUD's text, for each split\n"
+		"screen player; false shows none, as the original game did." },
+	{ "display.loading_screen_min_seconds", _config_real, "0.0", "HALO_LOADING_SCREEN_MIN_SECONDS",
+		_environment_value, _platform_all,
+		"Keep the original loading screen up for at least this many seconds\n"
+		"when a level loads, as loading from the Xbox's disc did (up to 30); 0\n"
+		"for no wait. Only in games no other machine is in (campaign, split\n"
+		"screen): a game on the network loads as fast as it can." },
 	{ "display.scoreboard_team_layout", _config_string, "\"teams\"", "HALO_SCOREBOARD_TEAM_LAYOUT", _environment_value,
 		_platform_all,
 		"How the scoreboard lists a team game's players: \"teams\" in a column for\n"
@@ -208,6 +234,18 @@ static const struct config_setting config_settings[] =
 		_platform_desktop,
 		"The microphone voice chat listens to: a device's name as Settings >\n"
 		"Audio lists it, or \"default\" for the system's (also if it is not found)." },
+	{ "audio.loose_sounds", _config_boolean, "false", "HALO_LOOSE_SOUNDS", _environment_value, _platform_all,
+		"For those making sounds: play each of a map's sounds that has a Halo PC\n"
+		"sound tag file of its name under the data root's tags folder\n"
+		"(tags/sound/.../name.sound) from that file. At the console,\n"
+		"loose_sounds_reload reads the files again and loose_sounds false gives\n"
+		"the map's sounds back." },
+	{ "audio.resampling", _config_string, "\"sinc\"", "HALO_AUDIO_RESAMPLING", _environment_value, _platform_all,
+		"How sounds recorded at another rate (most are 22 kHz) are played at the\n"
+		"output's 48 kHz: \"sinc\" keeps their band and nothing above it;\n"
+		"\"linear\" interpolates between their samples, as the game did before\n"
+		"OpenCE's build 130: their top octave duller, and images of their band\n"
+		"above it (a brighter, grainier sound)." },
 
 	{ "input.touch_controls", _config_string, "\"auto\"", "HALO_TOUCH_CONTROLS", _environment_value, _platform_android | _platform_web,
 		"The on-screen touch controls in a game: \"auto\" shows them on a\n"
@@ -345,6 +383,10 @@ static const struct config_setting config_settings[] =
 		"clipboard) that lets whoever has it join over the internet; opening a\n"
 		"link (or copying one before switching to the game) joins. Only people\n"
 		"with the invite can join. Off keeps system link to the local network." },
+	{ "network.relay_fallback", _config_boolean, "true", "HALO_NET_RELAY", _environment_value, _platform_all,
+		"Fallback for strict/mobile NAT: relay encrypted game packets through\n"
+		"network.signalling_brokers. Public brokers are for testing; for reliable\n"
+		"play configure a broker you operate. False uses direct UDP only." },
 	{ "network.join_from_clipboard", _config_boolean, "true", "HALO_NET_JOIN_FROM_CLIPBOARD", _environment_value,
 		_platform_all,
 		"Join the game of an invite link found on the clipboard when the game\n"
@@ -456,6 +498,12 @@ static const struct config_setting config_settings[] =
 		"invite find each other (its messages are encrypted), beside this file\n"
 		"unless a full path: one host:port on each line, up to 4. Updates\n"
 		"replace brokers.txt: keep a list of your own under another name." },
+	{ "network.server_name", _config_string, "\"\"", "HALO_NET_SERVER_NAME", _environment_value, _platform_all,
+		"The name a dedicated host's listing shows in everyone's server\n"
+		"browser (debug.network_test's host; a game the menus make takes\n"
+		"Server Setup's own). Empty leaves the game's own, which here is\n"
+		"none." },
+
 	{ "network.stun_servers", _config_string, "\"stun.l.google.com:19302,stun.cloudflare.com:3478\"",
 		"HALO_NET_STUN", _environment_value, _platform_all,
 		"Public STUN servers that tell this machine its internet address;\n"
@@ -475,9 +523,10 @@ static const struct config_setting config_settings[] =
 
 	{ "debug.network_test", _config_string, "\"\"", "HALO_NETWORK_TEST", _environment_value, _platform_all,
 		"Automated system link sessions for testing (port/linux/game/network_test.c):\n"
-		"\"host:<map>\" hosts a game on that map, \"join\" joins the first game found,\n"
-		"\"browse\" the one with the most players the server browser lists (not\n"
-		"co-op, if it can); empty for none." },
+		"\"host:<map>[:<variant>,<variant>...]\" hosts a game on that map with those\n"
+		"variants in turn, and \";\" between such entries rotates through the maps\n"
+		"(the first again past the last); \"join\" joins the first game found;\n"
+		"\"browse\" joins the fullest listed non-co-op game; empty for none." },
 	{ "debug.network_test_start", _config_real, "15.0", "HALO_NETWORK_TEST_START", _environment_value, _platform_all,
 		"Seconds after hosting that an automated test game starts." },
 	{ "debug.network_test_kill", _config_real, "0.0", "HALO_NETWORK_TEST_KILL", _environment_value, _platform_all,
@@ -485,6 +534,11 @@ static const struct config_setting config_settings[] =
 	{ "debug.network_test_score", _config_integer, "0", "HALO_NETWORK_TEST_SCORE", _environment_value, _platform_all,
 		"The score an automated test host's game type plays to (a short game, to\n"
 		"test the next); 0 the game type's own." },
+	{ "debug.network_test_time", _config_integer, "0", "HALO_NETWORK_TEST_TIME", _environment_value, _platform_all,
+		"The minutes an automated test host gives a game, over the game type's own\n"
+		"limit (a built-in variant's is none, so its game ends only by the score it\n"
+		"plays to and a host that rotates maps would never move on); 0 the game\n"
+		"type's own." },
 	{ "debug.network_test_shoot", _config_real, "0.0", "HALO_NETWORK_TEST_SHOOT", _environment_value, _platform_all,
 		"Every this many seconds each automated test player hits the next with\n"
 		"their weapon, within its reach (the host brings far players near the\n"

@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenCE-Touch playlist server
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=opence
+WorkingDirectory=/var/lib/opence/data
+ExecStart=/usr/bin/python3 /opt/opence/server/run.py --executable /opt/opence/halo-linux-release/halo --data /var/lib/opence/data --saves /var/lib/opence/saves --playlist playlists/slayer.txt
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

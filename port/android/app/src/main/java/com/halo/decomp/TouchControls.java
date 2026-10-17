@@ -1,1255 +1,708 @@
 package com.halo.decomp;
 
+import android.app.Activity;
 import android.app.AlertDialog;
-import android.content.Context;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.hardware.Sensor;
-import android.hardware.SensorEvent;
-import android.hardware.SensorEventListener;
-import android.hardware.SensorManager;
-import android.hardware.input.InputManager;
-import android.media.AudioAttributes;
-import android.os.Build;
-import android.os.SystemClock;
-import android.os.VibrationEffect;
-import android.os.Vibrator;
-import android.os.VibratorManager;
-import android.util.SparseArray;
-import android.util.SparseIntArray;
-import android.view.InputDevice;
+import android.graphics.RectF;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.WindowManager;
-import android.widget.Button;
+import android.widget.ArrayAdapter;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.SeekBar;
-import android.widget.Switch;
+import android.widget.Spinner;
 import android.widget.TextView;
-import android.widget.Toast;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.libsdl.app.SDLActivity;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
-import java.util.Arrays;
-import java.util.Locale;
+/** Editable multitouch gamepad with relative swipe aim and absolute menu taps. */
+public final class TouchControls extends View implements android.hardware.SensorEventListener {
+    private static final int BUTTON = 0, MOVE = 1, AIM = 2;
+    private static final int PAD = 1000, CAMERA = 2000;
+    private static final String[] ACTION_NAMES = {
+        "A / select / jump", "B / cancel / melee", "X / use / reload", "Y / switch weapon",
+        "LB / flashlight", "LT / grenade", "RB / switch grenade", "RT / fire",
+        "L3 / crouch", "R3 / zoom", "START / pause / finish name", "BACK / scoreboard",
+        "D-pad up", "D-pad down", "D-pad left", "D-pad right", "Camera mode", "None"
+    };
+    private static final int[] ACTION_KEYS = {
+        PAD, PAD+1, PAD+2, PAD+3, PAD+9, PAD+15, PAD+10, PAD+16,
+        PAD+7, PAD+8, PAD+6, PAD+4, PAD+11, PAD+12, PAD+13, PAD+14, CAMERA, 0
+    };
 
-/**
- * The on-screen touch controls: a multitouch overlay over SDL's surface,
- * with a stick, the controller's buttons, swipe (and optionally gyroscope)
- * aiming and an editor for the layout (TouchLayout). Its state goes to the
- * game through port/android/host/host_touch.c, as port 0's controller.
- *
- * It shows only in a game, never at the main menu, over a menu (which
- * takes taps itself, port/linux/src/touch_input.c) or during a cinematic,
- * only on a touchscreen, and with input.touch_controls = "auto" only while
- * no controller is connected. While it is not shown it lets every finger
- * through to the game.
- */
-public final class TouchControls extends View implements SensorEventListener, InputManager.InputDeviceListener {
-    /** what a finger holds besides a control: the view swipe */
-    private static final int LOOK = -5;
-    private static final int NOTHING = Integer.MIN_VALUE;
-    /** the toolbar's items (at the top of the screen) */
-    private static final int TOOLBAR_TOGGLE = -3;
-    private static final int TOOLBAR_OPTIONS = -4;
-    private static final int TOOLBAR_EXPORT = -6;
-    private static final int TOOLBAR_IMPORT = -7;
-    private static final float TOOLBAR_RADIUS = 28;
-    private static final float OPTIONS_RADIUS = 34;
-
-    /** the logical grid the controls are laid out on, scaled to the display's height */
-    private static final float GRID_WIDTH = 960;
-    private static final float GRID_HEIGHT = 540;
-    /** a control is never smaller than a finger: 24 dp of radius, 48 across */
-    private static final float MINIMUM_RADIUS_DP = 24;
-    /** a finger moves this far (logical units) before a press becomes a swipe */
-    private static final float SLOP = 10;
-    /** the move stick's dead zone and its touch area beyond its circle */
-    private static final float STICK_DEAD_ZONE = 0.12f;
-    private static final float STICK_REACH = 1.28f;
-    private static final float STICK_KNOB_RADIUS = 24;
-    /** a floating stick goes where a thumb lands in this part of the display (from the lower left) */
-    private static final float FLOATING_ZONE_WIDTH = 0.45f;
-    private static final float FLOATING_ZONE_TOP = 0.35f;
-    /** radians per logical unit of swipe (the mouse's rate: xinput_sdl.c) */
-    private static final float LOOK_RADIANS_PER_UNIT = 0.0022f;
-    /** a label is at most this many radii wide */
-    private static final float LABEL_WIDTH = 1.7f;
-    private static final long POLL_MS = 16;
-    /** the game is in play this long before the controls show (no flash at a level's first frame) */
-    private static final long SHOW_DELAY_MS = 200;
-    private static final long VIBRATION_MS = 110;
-    private static final long VIBRATION_RENEW_MS = 70;
-
-    /** the game's HALO_TOUCH_SCENE bits (port/linux/src/touch_input.c) */
-    private static final int SCENE_KNOWN = 1;
-    private static final int SCENE_MENUS = 2;
-    private static final int SCENE_ON = 4;
-    private static final int SCENE_OFF = 8;
-
-    private static final String PREFERENCES = "touch-layout-v1";
-    private static final String KEY_CONFIGURATION = "configuration";
-    private static final String KEY_HIDDEN = "hidden";
-
-    /**
-     * a kind of control: the SDL button bit or trigger axis it sends (-1 for
-     * none), and the game's controller button it is (port/linux/game/
-     * touch_game.c numbers them: input.h's _gamepad_*), which names it
-     */
-    private static final class Kind {
-        final int bit;
-        final int trigger;
-        final int gamepadButton;
-        final String buttonName;
-        final boolean faceButton;
-
-        Kind(int bit, int trigger, int gamepadButton, String buttonName, boolean faceButton) {
-            this.bit = bit;
-            this.trigger = trigger;
-            this.gamepadButton = gamepadButton;
-            this.buttonName = buttonName;
-            this.faceButton = faceButton;
+    private static final class Control {
+        String id, label;
+        int kind, action, pressed;
+        float x, y, radius, opacity;
+        Control(String id, String label, int kind, int action, float x, float y, float radius) {
+            this.id = id; this.label = label; this.kind = kind; this.action = action;
+            this.x = x; this.y = y; this.radius = radius; opacity = 0.45f;
         }
     }
+    private static final class Finger {
+        Control control;
+        int action;
+        float downX, downY, lastX, lastY, startX, startY;
+        boolean dragged, menu;
+    }
 
-    /** by TouchLayout's kinds; bits follow SDL_GamepadButton, triggers are SDL axes 4 and 5 */
-    private static final Kind[] KINDS = {
-        new Kind(0, -1, 0, "A", true),
-        new Kind(1, -1, 1, "B", true),
-        new Kind(2, -1, 2, "X", true),
-        new Kind(3, -1, 3, "Y", true),
-        new Kind(-1, 5, 7, "RT", false),
-        new Kind(-1, 4, 6, "LT", false),
-        new Kind(7, -1, 14, "LS", false),
-        new Kind(8, -1, 15, "RS", false),
-        new Kind(9, -1, 5, "White", false),
-        new Kind(10, -1, 4, "Black", false),
-        new Kind(6, -1, 12, "Start", false),
-        new Kind(4, -1, 13, "Back", false),
-        new Kind(11, -1, 8, "Up", false),
-        new Kind(12, -1, 9, "Down", false),
-        new Kind(13, -1, 10, "Left", false),
-        new Kind(14, -1, 11, "Right", false),
-        new Kind(-1, -1, -1, "Move", false),
-        new Kind(-1, 5, 7, "RT", false),
-    };
-
-    /** the game's controls (input_abstraction.c's _game_control_*), as the buttons name them */
-    private static final String[] GAME_CONTROLS = {
-        "Jump", "Gren. type", "Reload", "Weapon", "Melee", "Light",
-        "Grenade", "Fire", "Pause", "Back", "Crouch", "Zoom",
-    };
-    /** the default profile's mapping, until the game sends the player's own */
-    private static final int[] DEFAULT_BINDINGS = {
-        0, 4, 2, 3, 1, 5, 6, 7, -1, -1, -1, -1, 8, 9, 10, 11,
-    };
-
-    private static native void nativeState(int lx, int ly, int rx, int ry, int lt, int rt, int buttons);
-    private static native void nativeLook(float dx, float dy);
-    private static native void nativeGyro(float dx, float dy);
-    private static native void nativeLookReset();
-    private static native int nativeRumble();
-    private static native int nativeScene();
-    private static native int nativeBindings(int[] controls);
-
+    private final Activity activity;
+    private final SharedPreferences prefs;
+    private final ArrayList<Control> controls = new ArrayList<>();
+    private final Map<Integer, Finger> fingers = new HashMap<>();
+    private final Map<Integer, Integer> held = new HashMap<>();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final SharedPreferences preferences;
-    private final SensorManager sensors;
-    private final Sensor gyroscope;
-    private final Vibrator vibrator;
-    private final InputManager inputManager;
-    private final boolean touchscreenFeature;
-    private final GyroscopeAim gyroAim = new GyroscopeAim();
-    private final float[] gyroDelta = new float[2];
-    private final AudioAttributes rumbleAttributes = new AudioAttributes.Builder()
-        .setUsage(AudioAttributes.USAGE_GAME)
-        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-        .build();
-
-    private TouchLayout layout = new TouchLayout();
-    private float sensitivity = 1f;
-    /** the controls removed by the toolbar's Hide, until its Touch */
-    private boolean hidden;
-    private boolean editing;
-    /** the option dialogs open (one opens before the last one's dismissal is told) */
-    private int openDialogs;
-
-    /** what each finger holds: a control, LOOK, or (in toolbarFingers) a toolbar item */
-    private final SparseIntArray owners = new SparseIntArray();
-    /** where each finger on a button went down, in pixels: dragged, it swipes */
-    private final SparseArray<float[]> buttonTouches = new SparseArray<>();
-    /** each finger on a toolbar item: {x, y, item}; the item acts when it lifts there */
-    private final SparseArray<float[]> toolbarFingers = new SparseArray<>();
-    private final int[] axes = new int[6];
-    private int lookPointer = -1;
-    private float lookX;
-    private float lookY;
-    /** a floating stick's centre while a thumb holds it (logical units) */
-    private boolean stickFloating;
-    private float stickX;
-    private float stickY;
-    private int dragPointer = -1;
-    private int dragControl = -1;
-    private float dragOffsetX;
-    private float dragOffsetY;
-
-    /** pixels per logical unit, and the display in logical units */
-    private float scale = 1;
-    private float logicalWidth = GRID_WIDTH;
-    private float logicalHeight = GRID_HEIGHT;
-    private int insetRight;
-    private int insetTop;
-
-    private int scene;
-    private boolean controllerConnected;
-    private boolean touchscreen;
-    private boolean deviceInputActive;
-    /** the controls are on screen: shown() for SHOW_DELAY_MS */
-    private boolean showing;
-    private long shownSince = -1;
-    private boolean gyroRegistered;
-    private int lastAmplitude;
-    private long lastVibration;
-    private final int[] bindings = DEFAULT_BINDINGS.clone();
-    private final int[] bindingsRead = new int[bindings.length];
-    private int bindingsSerial;
-
-    /** reads what the game says every frame: when to show, the buttons' names, and the rumble */
-    private final Runnable poll = new Runnable() {
-        @Override
-        public void run() {
-            if (!deviceInputActive)
-                return;
-            scene = nativeScene();
-            updateShowing();
-            readBindings();
-            updateRumble();
-            postDelayed(this, POLL_MS);
+    private final RectF editRect = new RectF(), menuRect = new RectF(), optionsRect = new RectF();
+    // HUD panels adapted from FulGerNet/halo-ce-android db04b1d4.
+    private HudLayout hud;
+    private boolean hudEditing;
+    private int hudPointer = -1, hudPanel = -1;
+    private float hudLastX, hudLastY;
+    private boolean editing, menuTouch = true, menus = true;
+    private int inputMode = -1;
+    private float pointerX, pointerY;
+    private final Runnable modePoll = new Runnable() {
+        @Override public void run() {
+            refreshMode();
+            pollFeatures();
+            postDelayed(this, 100);
         }
     };
+    private int toolbarPointer = -1, toolbarAction = -1, mouseState;
+    private float sensitivity = 1.8f;
 
-    public TouchControls(Context context) {
-        super(context);
-        sensors = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
-        gyroscope = sensors == null ? null : sensors.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
-        if (Build.VERSION.SDK_INT >= 31) {
-            VibratorManager manager = (VibratorManager) context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
-            vibrator = manager == null ? null : manager.getDefaultVibrator();
-        } else {
-            vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
-        }
-        inputManager = (InputManager) context.getSystemService(Context.INPUT_SERVICE);
-        touchscreenFeature = context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN);
-        preferences = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE);
-        loadLayout(context);
-        hidden = preferences.getBoolean(KEY_HIDDEN, false);
-        refreshInputDevices();
+    public TouchControls(Activity activity) {
+        super(activity);
+        this.activity = activity;
+        prefs = activity.getSharedPreferences("touch_controls_v3", Activity.MODE_PRIVATE);
         setFocusable(false);
-        setContentDescription("Halo touch controller");
-        setOnApplyWindowInsetsListener((view, insets) -> {
-            // (only the toolbar moves: the fingers stay held as the system bars come and go)
-            int right = insetRight;
-            int top = insetTop;
-            insetRight = insets.getSystemWindowInsetRight();
-            insetTop = insets.getSystemWindowInsetTop();
-            if (insets.getDisplayCutout() != null) {
-                insetRight = Math.max(insetRight, insets.getDisplayCutout().getSafeInsetRight());
-                insetTop = Math.max(insetTop, insets.getDisplayCutout().getSafeInsetTop());
-            }
-            if (insetRight != right || insetTop != top)
-                invalidate();
-            return insets;
-        });
+        setClickable(true);
+        defaults();
+        load();
+        loadFeatures();
+        hud = HudLayout.load(prefs.getString("hud-layout", null));
+        nativeHudLayout(hud.offsets());
     }
 
-    private void loadLayout(Context context) {
-        String configuration = preferences.getString(KEY_CONFIGURATION, null);
-        if (configuration == null)
-            return;
-        try {
-            TouchLayout.Configuration saved = TouchLayout.importConfiguration(configuration);
-            layout = saved.layout;
-            sensitivity = saved.sensitivity;
-        } catch (IllegalArgumentException e) {
-            Toast.makeText(context, "The saved touch layout could not be read. Using the default one.",
-                Toast.LENGTH_LONG).show();
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        post(modePoll);
+    }
+    @Override protected void onDetachedFromWindow() {
+        removeCallbacks(modePoll);
+        stopDeviceInput();
+        releaseAll();
+        super.onDetachedFromWindow();
+    }
+    private void refreshMode() {
+        int mode = TouchInput.mode();
+        if (mode == inputMode) return;
+        releaseAll();
+        boolean nextMenus = (mode & 1) != 0;
+        if (nextMenus != menus) {
+            editing = false;
+            menuTouch = nextMenus;
         }
-    }
-
-    // ---------- the activity's lifecycle (HaloActivity)
-
-    public void startDeviceInput() {
-        if (deviceInputActive)
-            return;
-        deviceInputActive = true;
-        if (inputManager != null)
-            inputManager.registerInputDeviceListener(this, null);
-        refreshInputDevices();
-        gyroAim.reset();
+        menus = nextMenus;
+        inputMode = mode;
         updateSensors();
-        post(poll);
-    }
-
-    public void stopDeviceInput() {
-        deviceInputActive = false;
-        removeCallbacks(poll);
-        if (inputManager != null)
-            inputManager.unregisterInputDeviceListener(this);
-        updateSensors();
-        cancelRumble();
-        reset();
-    }
-
-    // ---------- the display
-
-    @Override
-    protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
-        layoutControls();
-        requestApplyInsets();
-    }
-
-    /** scales the grid to the display (its height, keeping the circles round) */
-    private void layoutControls() {
-        if (getWidth() <= 0 || getHeight() <= 0)
-            return;
-        reset();
-        float width = getWidth();
-        float height = getHeight();
-        scale = Math.max(0.01f, Math.min(width / GRID_WIDTH, height / GRID_HEIGHT));
-        logicalWidth = width / scale;
-        logicalHeight = height / scale;
-        layout.bounds(logicalWidth, logicalHeight);
-        layout.setMinimumRadius(minimumRadius());
         invalidate();
     }
 
-    /** a finger's width, in logical units (at most TouchLayout.MAX_MINIMUM_RADIUS) */
-    private float minimumRadius() {
-        float radius = MINIMUM_RADIUS_DP * getResources().getDisplayMetrics().density / scale;
-        return Math.min(radius, TouchLayout.MAX_MINIMUM_RADIUS);
+    private float dp(float value) { return value * getResources().getDisplayMetrics().density; }
+    private float unit() { return Math.min(getWidth(), getHeight()); }
+    private float radius(Control c) { return Math.max(dp(18), c.radius * unit()); }
+    private static float clamp(float x, float lo, float hi) { return Math.max(lo, Math.min(hi, x)); }
+    private void add(String id, String label, int kind, int action, float x, float y, float r) {
+        controls.add(new Control(id, label, kind, action, x, y, r));
+    }
+    private void defaults() {
+        controls.clear();
+        add("move", "MOVE", MOVE, 0, .14f, .72f, .16f);
+        add("aim", "AIM", AIM, 0, .59f, .68f, .18f);
+        add("a", "A", BUTTON, PAD, .87f, .73f, .065f);
+        add("b", "B", BUTTON, PAD+1, .95f, .62f, .065f);
+        add("x", "X", BUTTON, PAD+2, .79f, .62f, .065f);
+        add("y", "Y", BUTTON, PAD+3, .87f, .51f, .065f);
+        add("lb", "LB", BUTTON, PAD+9, .08f, .24f, .055f);
+        add("lt", "LT", BUTTON, PAD+15, .19f, .24f, .055f);
+        add("rb", "RB", BUTTON, PAD+10, .83f, .24f, .055f);
+        add("rt", "RT", BUTTON, PAD+16, .94f, .24f, .07f);
+        add("l3", "L3", BUTTON, PAD+7, .29f, .48f, .05f);
+        add("r3", "R3", BUTTON, PAD+8, .73f, .42f, .05f);
+        add("start", "START", BUTTON, PAD+6, .58f, .24f, .055f);
+        add("back", "BACK", BUTTON, PAD+4, .47f, .24f, .055f);
+        add("reload", "RELOAD", BUTTON, PAD+2, .75f, .89f, .06f);
+        add("score", "SCORE", BUTTON, PAD+4, .36f, .24f, .055f);
+        add("up", "UP", BUTTON, PAD+11, .36f, .65f, .04f);
+        add("down", "DOWN", BUTTON, PAD+12, .36f, .87f, .04f);
+        add("left", "LEFT", BUTTON, PAD+13, .305f, .76f, .04f);
+        add("right", "RIGHT", BUTTON, PAD+14, .415f, .76f, .04f);
     }
 
-    private float logical(float pixels) {
-        return pixels / scale;
+    private void load() {
+        sensitivity = clamp(prefs.getFloat("sensitivity", 1.8f), .25f, 5f);
+        try {
+            String saved = prefs.getString("layout", "");
+            boolean legacy = saved.isEmpty();
+            if (legacy) {
+                SharedPreferences old = activity.getSharedPreferences("touch_controls_v2", Activity.MODE_PRIVATE);
+                saved = old.getString("layout", "");
+                sensitivity = clamp(old.getFloat("sensitivity", sensitivity), .25f, 5f);
+            }
+            if (saved.isEmpty()) return;
+            JSONArray array = new JSONArray(saved);
+            ArrayList<Control> loaded = new ArrayList<>();
+            for (int i = 0; i < array.length(); i++) {
+                JSONObject o = array.getJSONObject(i);
+                int kind = o.getInt("kind"), action = o.getInt("action");
+                if (legacy) action = migrateAction(action);
+                if (kind < BUTTON || kind > AIM || !validAction(action)) throw new JSONException("Invalid control");
+                Control c = new Control(o.getString("id"), o.getString("label"), kind, action,
+                        clamp((float)o.getDouble("x"), 0, 1), clamp((float)o.getDouble("y"), 0, 1),
+                        clamp((float)o.getDouble("radius"), .025f, .3f));
+                c.opacity = clamp((float)o.getDouble("opacity"), .1f, .9f);
+                loaded.add(c);
+            }
+            if (!loaded.isEmpty()) { controls.clear(); controls.addAll(loaded); }
+        } catch (JSONException | ClassCastException ignored) { defaults(); }
     }
 
-    private float toolbarY() {
-        return Math.max(38, insetTop / scale + 38);
-    }
-
-    private float optionsX() {
-        return logicalWidth - Math.max(42, insetRight / scale + 42);
-    }
-
-    private float toolbarRadius(float radius) {
-        return Math.max(radius, minimumRadius());
-    }
-
-    // ---------- when the controls show
-
-    /**
-     * whether the controls belong on screen: in a game (no menu or
-     * cinematic), never without a touchscreen, and with
-     * input.touch_controls = "auto" only while no controller is connected
-     */
-    private boolean shown() {
-        if ((scene & SCENE_KNOWN) == 0 || (scene & (SCENE_MENUS | SCENE_OFF)) != 0 || !touchscreen)
-            return false;
-        return (scene & SCENE_ON) != 0 || !controllerConnected;
-    }
-
-    /** shows the controls once shown() has held for SHOW_DELAY_MS; hides them at once */
-    private void updateShowing() {
-        boolean show = false;
-        if (!shown()) {
-            shownSince = -1;
-        } else {
-            long now = SystemClock.uptimeMillis();
-            if (shownSince < 0)
-                shownSince = now;
-            show = now - shownSince >= SHOW_DELAY_MS;
+    private int migrateAction(int key) {
+        switch (key) {
+            case KeyEvent.KEYCODE_SPACE: case KeyEvent.KEYCODE_ENTER: return PAD;
+            case KeyEvent.KEYCODE_F: return PAD+1;
+            case KeyEvent.KEYCODE_E: case KeyEvent.KEYCODE_R: case KeyEvent.KEYCODE_FORWARD_DEL: return PAD+2;
+            case KeyEvent.KEYCODE_1: return PAD+3;
+            case KeyEvent.KEYCODE_Q: return PAD+9;
+            case KeyEvent.KEYCODE_G: case -2: return PAD+15;
+            case KeyEvent.KEYCODE_X: return PAD+10;
+            case -1: return PAD+16;
+            case KeyEvent.KEYCODE_CTRL_LEFT: return PAD+7;
+            case KeyEvent.KEYCODE_Z: case -4: return PAD+8;
+            case KeyEvent.KEYCODE_ESCAPE: return PAD+6;
+            case KeyEvent.KEYCODE_DEL: case KeyEvent.KEYCODE_TAB: return PAD+4;
+            case KeyEvent.KEYCODE_DPAD_UP: return PAD+11;
+            case KeyEvent.KEYCODE_DPAD_DOWN: return PAD+12;
+            case KeyEvent.KEYCODE_DPAD_LEFT: return PAD+13;
+            case KeyEvent.KEYCODE_DPAD_RIGHT: return PAD+14;
+            default: return 0;
         }
-        if (show != showing) {
-            showing = show;
-            reset();
-            updateSensors();
+    }
+
+    private boolean validAction(int action) {
+        for (int key : ACTION_KEYS) if (key == action) return true;
+        return false;
+    }
+    private void save() {
+        JSONArray array = new JSONArray();
+        try {
+            for (Control c : controls) {
+                JSONObject o = new JSONObject();
+                o.put("id", c.id).put("label", c.label).put("kind", c.kind).put("action", c.action)
+                        .put("x", c.x).put("y", c.y).put("radius", c.radius).put("opacity", c.opacity);
+                array.put(o);
+            }
+            prefs.edit().putString("layout", array.toString()).putFloat("sensitivity", sensitivity).apply();
+        } catch (JSONException ignored) { /* Only finite values enter this layout. */ }
+    }
+
+    @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        releaseAll();
+        float top = dp(8), height = dp(34), width = dp(72), gap = dp(8);
+        float left = Math.max(dp(8), (w - 3 * width - 2 * gap) / 2f);
+        editRect.set(left, top, left + width, top + height);
+        menuRect.set(editRect.right + gap, top, editRect.right + gap + width, top + height);
+        optionsRect.set(menuRect.right + gap, top, menuRect.right + gap + width, top + height);
+        for (Control c : controls) bound(c);
+    }
+    private void bound(Control c) {
+        if (getWidth() == 0 || getHeight() == 0) return;
+        float r = radius(c);
+        c.x = clamp(c.x, r / getWidth(), 1 - r / getWidth());
+        c.y = clamp(c.y, (editRect.bottom + dp(8) + r) / getHeight(), 1 - r / getHeight());
+    }
+
+    @Override protected void onDraw(Canvas canvas) {
+        if (hudEditing) { drawHudEditor(canvas); return; }
+        if (movieActive) return;
+        if (settings.fps && !menus && !editing && !settings.overlayDisabled) {
+            paint.setColor(Color.WHITE); paint.setAlpha(255); paint.setTextSize(dp(14));
+            paint.setTextAlign(Paint.Align.LEFT); canvas.drawText("FPS: " + currentFps, dp(12), dp(70), paint);
+        }
+        if (settings.overlayDisabled && !editing) return;
+        if (!menuTouch || editing) {
+            for (Control c : controls) {
+                float x = c.x * getWidth(), y = c.y * getHeight(), r = radius(c);
+                paint.setStyle(Paint.Style.FILL);
+                paint.setColor(c.pressed > 0 ? 0xFF3E98B5 : 0xFF203342);
+                paint.setAlpha((int)(255 * (editing ? .7f : c.opacity)));
+                canvas.drawCircle(x, y, r, paint);
+                paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(dp(1.5f));
+                paint.setColor(Color.WHITE); paint.setAlpha(editing ? 210 : 135);
+                canvas.drawCircle(x, y, r, paint);
+                if (c.kind != BUTTON) {
+                    paint.setAlpha(100);
+                    canvas.drawCircle(x, y, r * .4f, paint);
+                    for (Finger f : fingers.values()) {
+                        if (f.control == c && !editing) {
+                            float dx = f.lastX - f.downX, dy = f.lastY - f.downY;
+                            float length = (float)Math.hypot(dx, dy), scale = length > r * .6f ? r * .6f / length : 1;
+                            canvas.drawCircle(x + dx * scale, y + dy * scale, r * .25f, paint);
+                        }
+                    }
+                }
+                paint.setStyle(Paint.Style.FILL); paint.setColor(Color.WHITE); paint.setAlpha(235);
+                paint.setTextAlign(Paint.Align.CENTER);
+                paint.setTextSize(Math.min(dp(13), r * .35f));
+                if (settings.icons && c.kind == BUTTON) {
+                    int icon = iconFor(c.action);
+                    if (icon >= 0) TouchIcons.draw(canvas, paint, icon, x, y, r*.68f, c.pressed > 0);
+                    else canvas.drawText(c.label, x, y - (paint.ascent() + paint.descent()) / 2, paint);
+                } else canvas.drawText(c.label, x, y - (paint.ascent() + paint.descent()) / 2, paint);
+            }
+        }
+        toolbar(canvas, editRect, editing ? "DONE" : "EDIT");
+        toolbar(canvas, menuRect, menus ? (menuTouch ? "PAD" : "TOUCH") : (menuTouch ? "GAME" : "MENU"));
+        toolbar(canvas, optionsRect, "OPTIONS");
+        if (menuTouch && !editing) {
+            paint.setColor(Color.WHITE); paint.setAlpha(230); paint.setTextSize(dp(12));
+            paint.setTextAlign(Paint.Align.CENTER);
+            canvas.drawText((inputMode & 2) != 0 ? "Tap letters, then DONE. PAD offers controller buttons." : "Tap menu items. PAD offers controller buttons.", getWidth()/2f, editRect.bottom + dp(18), paint);
+        }
+        if (editing) {
+            paint.setColor(Color.WHITE); paint.setAlpha(230); paint.setTextSize(dp(12));
+            paint.setTextAlign(Paint.Align.CENTER);
+            canvas.drawText("Drag to move. Tap to change size, opacity or action.", getWidth()/2f, editRect.bottom + dp(18), paint);
         }
     }
-
-    /** a game controller: a stick or a hat, not a phone's few gamepad keys */
-    private static boolean isController(InputDevice device) {
-        if (device == null || device.isVirtual())
-            return false;
-        if ((device.getSources() & InputDevice.SOURCE_JOYSTICK) != InputDevice.SOURCE_JOYSTICK)
-            return false;
-        return device.getMotionRange(MotionEvent.AXIS_X, InputDevice.SOURCE_JOYSTICK) != null
-            || device.getMotionRange(MotionEvent.AXIS_HAT_X, InputDevice.SOURCE_JOYSTICK) != null;
+    private void toolbar(Canvas canvas, RectF rect, String text) {
+        paint.setStyle(Paint.Style.FILL); paint.setColor(0xD9203342);
+        canvas.drawRoundRect(rect, dp(6), dp(6), paint);
+        paint.setColor(Color.WHITE); paint.setTextAlign(Paint.Align.CENTER); paint.setTextSize(dp(12));
+        canvas.drawText(text, rect.centerX(), rect.centerY() - (paint.ascent() + paint.descent()) / 2, paint);
+    }
+    private int toolbarAt(float x, float y) {
+        if (editRect.contains(x,y)) return 0;
+        if (menuRect.contains(x,y)) return 1;
+        if (optionsRect.contains(x,y)) return 2;
+        return -1;
+    }
+    private Control hit(float x, float y) {
+        // Buttons take precedence over pads when an edited layout overlaps.
+        for (int pass = 0; pass < 2; pass++)
+            for (int i = controls.size()-1; i >= 0; i--) {
+                Control c = controls.get(i);
+                if ((c.kind == BUTTON) != (pass == 0)) continue;
+                if (Math.hypot(x-c.x*getWidth(), y-c.y*getHeight()) <= radius(c)) return c;
+            }
+        return null;
     }
 
-    private void refreshInputDevices() {
-        boolean controller = false;
-        boolean touch = touchscreenFeature;
-        for (int id : InputDevice.getDeviceIds()) {
-            InputDevice device = InputDevice.getDevice(id);
-            if (device == null)
-                continue;
-            if (isController(device))
-                controller = true;
-            boolean touchSource = (device.getSources() & InputDevice.SOURCE_TOUCHSCREEN) == InputDevice.SOURCE_TOUCHSCREEN;
-            if (!device.isVirtual() && touchSource)
-                touch = true;
+    @Override public boolean onTouchEvent(MotionEvent e) {
+        if (hudEditing) return hudTouch(e);
+        refreshMode();
+        if ((inputMode & 4) == 0 || movieActive) return true;
+        if (settings.overlayDisabled && !editing) {
+            int a = e.getActionMasked();
+            if (menus) menuMouse(e.getX(), e.getY(), a);
+            return true;
         }
-        controllerConnected = controller;
-        touchscreen = touch;
-        updateShowing();
+        int action = e.getActionMasked(), index = e.getActionIndex(), id = e.getPointerId(index);
+        if (action == MotionEvent.ACTION_CANCEL) { releaseAll(); return true; }
+        if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
+            float x = e.getX(index), y = e.getY(index);
+            int tool = toolbarAt(x,y);
+            if (tool >= 0 && fingers.isEmpty() && toolbarPointer < 0) {
+                toolbarPointer = id; toolbarAction = tool; return true;
+            }
+            if (toolbarPointer >= 0) return true;
+            Control c = editing || !menuTouch ? hit(x,y) : null;
+            if (c == null && (!menuTouch || editing)) return true;
+            // Each stick has one owner; additional fingers cannot steal it.
+            for (Finger other : fingers.values())
+                if (editing || menuTouch || (c != null && c.kind != BUTTON && other.control == c)) return true;
+            Finger f = new Finger(); f.control = c;
+            f.downX = f.lastX = x; f.downY = f.lastY = y;
+            if (c != null) { f.startX = c.x; f.startY = c.y; f.action = c.action; c.pressed++; }
+            f.menu = menuTouch && !editing;
+            fingers.put(id, f);
+            if (!editing) {
+                if (f.menu) menuMouse(x, y, MotionEvent.ACTION_DOWN);
+                else if (c.kind == BUTTON) hold(f.action,true);
+            }
+        } else if (action == MotionEvent.ACTION_MOVE) {
+            for (int i = 0; i < e.getPointerCount(); i++) {
+                Finger f = fingers.get(e.getPointerId(i));
+                if (f == null) continue;
+                float x = e.getX(i), y = e.getY(i), dx = x-f.lastX, dy = y-f.lastY;
+                if (editing) {
+                    if (Math.hypot(x-f.downX,y-f.downY) > dp(8)) f.dragged = true;
+                    if (f.dragged) {
+                        f.control.x = f.startX + (x-f.downX)/getWidth();
+                        f.control.y = f.startY + (y-f.downY)/getHeight(); bound(f.control);
+                    }
+                } else if (f.menu) menuMouse(x, y, MotionEvent.ACTION_MOVE);
+                else if (f.control.kind == AIM || f.control.kind == BUTTON && f.action == PAD+16)
+                    mouseMove(dx*sensitivity,dy*sensitivity,true);
+                else if (f.control.kind == MOVE) {
+                    float r = radius(f.control), mx = (x-f.downX)/r, my = (y-f.downY)/r;
+                    float length = (float)Math.hypot(mx, my);
+                    if (length < .15f) { mx = my = 0; }
+                    else if (length > 1) { mx /= length; my /= length; }
+                    TouchInput.move(mx, my);
+                }
+                f.lastX = x; f.lastY = y;
+            }
+        } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP) {
+            if (id == toolbarPointer) {
+                int tool = toolbarAction; toolbarPointer = toolbarAction = -1;
+                if (toolbarAt(e.getX(index),e.getY(index)) == tool) {
+                    releaseAll();
+                    if (tool == 0) { editing = !editing; if (editing) menuTouch = false; save(); }
+                    if (tool == 1) {
+                        editing = false;
+                        menuTouch = !menuTouch;
+                        if (!menus && menuTouch) {
+                            TouchInput.button(6, true); TouchInput.button(6, false);
+                        }
+                    }
+                    if (tool == 2) options();
+                }
+            } else {
+                Finger f = fingers.remove(id);
+                if (f != null) {
+                    if (f.control != null) f.control.pressed = Math.max(0,f.control.pressed-1);
+                    if (editing) { save(); if (!f.dragged) editControl(f.control); }
+                    else if (f.menu) menuMouse(e.getX(index), e.getY(index), MotionEvent.ACTION_UP);
+                    else if (f.control.kind == BUTTON) hold(f.action,false);
+                    else if (f.control.kind == MOVE) TouchInput.move(0,0);
+                }
+            }
+        }
+        invalidate(); return true;
     }
 
-    @Override
-    public void onInputDeviceAdded(int deviceId) {
-        refreshInputDevices();
+    private void mouseMove(float x, float y, boolean relative) {
+        SDLActivity.onNativeMouse(0, MotionEvent.ACTION_MOVE, x, y, relative);
     }
-
-    @Override
-    public void onInputDeviceRemoved(int deviceId) {
-        refreshInputDevices();
+    private void menuMouse(float x, float y, int action) {
+        pointerX = x; pointerY = y;
+        if (action == MotionEvent.ACTION_DOWN) mouseState = 1;
+        if (action == MotionEvent.ACTION_UP) mouseState = 0;
+        // Both edges carry the clicked position; never send a relative zero
+        // movement in menu mode or click at the old mouse position.
+        SDLActivity.onNativeMouse(mouseState, action, x, y, false);
     }
-
-    @Override
-    public void onInputDeviceChanged(int deviceId) {
-        refreshInputDevices();
+    private void hold(int action, boolean down) {
+        if (action == CAMERA) { if (down && !menus) nativeCameraMode(); return; }
+        if (action == 0) return;
+        int count = held.containsKey(action) ? held.get(action) : 0;
+        if (!down && count == 0) return;
+        int next = down ? count+1 : count-1;
+        if (next == 0) held.remove(action); else held.put(action,next);
+        if ((count == 0 && down) || (next == 0 && !down)) {
+            TouchInput.button(action - PAD, down);
+        }
     }
-
-    private void setHidden(boolean hidden) {
-        reset();
-        this.hidden = hidden;
-        preferences.edit().putBoolean(KEY_HIDDEN, hidden).apply();
-        updateSensors();
-    }
-
-    // ---------- the controller state the game reads
-
-    /** lets go of every finger and sends a released controller */
-    public void reset() {
-        dragPointer = -1;
-        dragControl = -1;
-        owners.clear();
-        buttonTouches.clear();
-        toolbarFingers.clear();
-        lookPointer = -1;
-        stickFloating = false;
+    public void releaseAll() {
+        TouchInput.reset();
         gyroAim.reset();
         nativeLookReset();
-        Arrays.fill(axes, 0);
-        publish();
+        held.clear();
+        if (mouseState != 0) menuMouse(pointerX, pointerY, MotionEvent.ACTION_UP);
+        fingers.clear(); toolbarPointer = toolbarAction = -1;
+        for (Control c : controls) c.pressed = 0;
         invalidate();
     }
 
-    private void publish() {
-        if (editing || openDialogs > 0) {
-            nativeState(0, 0, 0, 0, 0, 0, 0);
-            return;
+    private LinearLayout dialogLayout() {
+        LinearLayout layout = new LinearLayout(activity); layout.setOrientation(LinearLayout.VERTICAL);
+        int padding = (int)dp(20); layout.setPadding(padding,padding,padding,padding); return layout;
+    }
+    private SeekBar slider(LinearLayout layout, String title, int max, int progress) {
+        TextView label = new TextView(activity); label.setText(title); layout.addView(label);
+        SeekBar seek = new SeekBar(activity); seek.setMax(max); seek.setProgress(progress); layout.addView(seek); return seek;
+    }
+    private int actionIndex(int key) {
+        for (int i = 0; i < ACTION_KEYS.length; i++) if (ACTION_KEYS[i] == key) return i;
+        return ACTION_KEYS.length - 1;
+    }
+    private void editControl(Control c) {
+        releaseAll();
+        LinearLayout layout = dialogLayout();
+        Spinner action = new Spinner(activity);
+        if (c.kind == BUTTON) {
+            action.setAdapter(new ArrayAdapter<>(activity,android.R.layout.simple_spinner_dropdown_item,ACTION_NAMES));
+            action.setSelection(actionIndex(c.action)); layout.addView(action);
         }
-        int bits = 0;
-        axes[4] = 0;
-        axes[5] = 0;
-        for (int i = 0; i < owners.size(); i++) {
-            int control = owners.valueAt(i);
-            if (control < 0 || control >= layout.size())
-                continue;
-            Kind kind = KINDS[layout.type(control)];
-            if (kind.bit >= 0)
-                bits |= 1 << kind.bit;
-            if (kind.trigger >= 0)
-                axes[kind.trigger] = 32767;
-        }
-        nativeState(axes[0], axes[1], axes[2], axes[3], axes[4], axes[5], bits);
-    }
-
-    private boolean held(int control) {
-        return owners.indexOfValue(control) >= 0;
-    }
-
-    private float stickCenterX() {
-        return stickFloating ? stickX : layout.x(TouchLayout.LEFT);
-    }
-
-    private float stickCenterY() {
-        return stickFloating ? stickY : layout.y(TouchLayout.LEFT);
-    }
-
-    /** the floating stick, centred where a thumb landed (at rest there, even near an edge) */
-    private void floatStick(float x, float y) {
-        stickFloating = true;
-        stickX = x;
-        stickY = y;
-    }
-
-    private boolean inFloatingZone(float x, float y) {
-        return x < logicalWidth * FLOATING_ZONE_WIDTH && y > logicalHeight * FLOATING_ZONE_TOP;
-    }
-
-    private void moveStick(int control, float x, float y) {
-        float dx = (x - stickCenterX()) / layout.radius(control);
-        float dy = (y - stickCenterY()) / layout.radius(control);
-        float length = (float) Math.sqrt(dx * dx + dy * dy);
-        if (length < STICK_DEAD_ZONE) {
-            dx = 0;
-            dy = 0;
-        } else if (length > 1) {
-            dx /= length;
-            dy /= length;
-        }
-        axes[0] = Math.round(dx * 32767);
-        axes[1] = Math.round(dy * 32767);
-    }
-
-    // ---------- fingers
-
-    private static boolean inside(float x, float y, float cx, float cy, float radius) {
-        return (x - cx) * (x - cx) + (y - cy) * (y - cy) <= radius * radius;
-    }
-
-    /** what is under a point (logical units): a toolbar item, a control, or NOTHING */
-    private int hit(float x, float y) {
-        if (inside(x, y, optionsX(), toolbarY(), toolbarRadius(OPTIONS_RADIUS)))
-            return TOOLBAR_OPTIONS;
-        if (editing && inside(x, y, optionsX() - 156, toolbarY(), toolbarRadius(OPTIONS_RADIUS)))
-            return TOOLBAR_EXPORT;
-        if (editing && inside(x, y, optionsX() - 78, toolbarY(), toolbarRadius(OPTIONS_RADIUS)))
-            return TOOLBAR_IMPORT;
-        if (!editing && inside(x, y, logicalWidth / 2, toolbarY(), toolbarRadius(TOOLBAR_RADIUS)))
-            return TOOLBAR_TOGGLE;
-        if (hidden && !editing)
-            return NOTHING;
-        for (int i = 0; i < layout.size(); i++) {
-            if (layout.shown(i) && layout.type(i) != TouchLayout.LEFT
-                    && inside(x, y, layout.x(i), layout.y(i), layout.radius(i)))
-                return i;
-        }
-        int stick = TouchLayout.LEFT;
-        float reach = editing ? 1 : STICK_REACH;
-        if (layout.shown(stick) && !held(stick)
-                && inside(x, y, layout.x(stick), layout.y(stick), layout.radius(stick) * reach))
-            return stick;
-        return NOTHING;
-    }
-
-    /**
-     * whether a finger went down where Android keeps its edge gestures; in
-     * sticky full screen the first swipe in from an edge only shows the
-     * system bars, and Android also hands it over as an ordinary finger
-     */
-    private boolean inGestureZone(float x, float y, boolean sidesOnly) {
-        int[] insets = ((HaloActivity) getContext()).getSystemGestureInsetsPixels();
-        if (x < insets[0] || x >= getWidth() - insets[2])
-            return true;
-        return !sidesOnly && (y < insets[1] || y >= getHeight() - insets[3]);
-    }
-
-    @Override
-    public boolean onTouchEvent(MotionEvent event) {
-        int action = event.getActionMasked();
-        if (!showing && !editing && openDialogs == 0) {
-            // the menus and cinematics take the fingers (SDL's surface below)
-            if (action == MotionEvent.ACTION_DOWN)
-                return false;
-            if (owners.size() > 0 || lookPointer >= 0)
-                reset();
-            return true;
-        }
-        if (editing)
-            editTouch(event);
-        else
-            gameTouch(event);
-        publish();
-        invalidate();
-        return true;
-    }
-
-    @Override
-    public boolean performClick() {
-        super.performClick();
-        return true;
-    }
-
-    private void gameTouch(MotionEvent event) {
-        int index = event.getActionIndex();
-        int id = event.getPointerId(index);
-        switch (event.getActionMasked()) {
-            case MotionEvent.ACTION_DOWN:
-            case MotionEvent.ACTION_POINTER_DOWN:
-                fingerDown(id, event.getX(index), event.getY(index));
-                break;
-            case MotionEvent.ACTION_MOVE:
-                for (int i = 0; i < event.getPointerCount(); i++)
-                    fingerMoved(event.getPointerId(i), event.getX(i), event.getY(i));
-                break;
-            case MotionEvent.ACTION_UP:
-            case MotionEvent.ACTION_POINTER_UP:
-                fingerUp(id, event.getX(index), event.getY(index));
-                break;
-            case MotionEvent.ACTION_CANCEL:
-                reset();
-                break;
-            default:
-                break;
-        }
-    }
-
-    /** a finger down in a game, at a point in pixels */
-    private void fingerDown(int id, float px, float py) {
-        if (inGestureZone(px, py, true))
-            return;
-        float x = logical(px);
-        float y = logical(py);
-        int target = hit(x, y);
-        int stick = TouchLayout.LEFT;
-        if (target == NOTHING && layout.floatingStick && !hidden && layout.shown(stick) && !held(stick)
-                && inFloatingZone(x, y) && !inGestureZone(px, py, false)) {
-            floatStick(x, y);
-            target = stick;
-        }
-        if (target == TOOLBAR_OPTIONS || target == TOOLBAR_TOGGLE) {
-            toolbarFingers.put(id, new float[] {px, py, target});
-        } else if (target != NOTHING) {
-            owners.put(id, target);
-            if (layout.type(target) == TouchLayout.LEFT)
-                moveStick(target, x, y);
-            else
-                buttonTouches.put(id, new float[] {px, py});
-        } else if (!hidden && lookPointer < 0 && !inGestureZone(px, py, false)) {
-            startLook(id, px, py);
-        }
-    }
-
-    private void startLook(int id, float px, float py) {
-        lookPointer = id;
-        lookX = px;
-        lookY = py;
-        if (owners.get(id, NOTHING) == NOTHING)
-            owners.put(id, LOOK);
-    }
-
-    private boolean movedPastSlop(float[] origin, float px, float py) {
-        return Math.hypot(px - origin[0], py - origin[1]) > SLOP * scale;
-    }
-
-    private void fingerMoved(int id, float px, float py) {
-        int control = owners.get(id, NOTHING);
-        if (control >= 0 && layout.type(control) == TouchLayout.LEFT)
-            moveStick(control, logical(px), logical(py));
-        float[] toolbar = toolbarFingers.get(id);
-        if (toolbar != null && movedPastSlop(toolbar, px, py)) {
-            // a swipe that began on the toolbar aims; the item does not act
-            toolbarFingers.remove(id);
-            if (!hidden && lookPointer < 0)
-                startLook(id, toolbar[0], toolbar[1]);
-        }
-        float[] origin = buttonTouches.get(id);
-        if (origin != null && lookPointer >= 0 && lookPointer != id) {
-            // while another finger aims, a held button's finger may only take over from where it is
-            origin[0] = px;
-            origin[1] = py;
-        }
-        if (lookPointer < 0 && origin != null && movedPastSlop(origin, px, py)) {
-            // a held button (either Fire too) also aims
-            lookPointer = id;
-            lookX = origin[0];
-            lookY = origin[1];
-        }
-        if (id == lookPointer) {
-            nativeLook(logical(px - lookX) * sensitivity, logical(py - lookY) * sensitivity);
-            lookX = px;
-            lookY = py;
-        }
-    }
-
-    private void fingerUp(int id, float px, float py) {
-        float[] toolbar = toolbarFingers.get(id);
-        if (toolbar != null) {
-            toolbarFingers.remove(id);
-            int item = (int) toolbar[2];
-            if (hit(logical(px), logical(py)) == item)
-                toolbarAction(item);
-            return;
-        }
-        int control = owners.get(id, NOTHING);
-        if (control >= 0 && layout.type(control) == TouchLayout.LEFT) {
-            axes[0] = 0;
-            axes[1] = 0;
-            stickFloating = false;
-        }
-        if (id == lookPointer)
-            lookPointer = -1;
-        owners.delete(id);
-        buttonTouches.remove(id);
-    }
-
-    private void toolbarAction(int item) {
-        if (item == TOOLBAR_OPTIONS)
-            showOptions();
-        else if (item == TOOLBAR_TOGGLE)
-            setHidden(!hidden);
-        performClick();
-    }
-
-    /** a finger in the layout editor: drags controls; Save, Export and Import act at once */
-    private void editTouch(MotionEvent event) {
-        int action = event.getActionMasked();
-        int index = event.getActionIndex();
-        int id = event.getPointerId(index);
-        if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
-            if (dragPointer >= 0)
-                return;
-            float x = logical(event.getX(index));
-            float y = logical(event.getY(index));
-            int target = hit(x, y);
-            if (target == TOOLBAR_OPTIONS) {
-                if (saveLayout()) {
-                    reset();
-                    editing = false;
-                    performClick();
+        SeekBar size = slider(layout,"Size",275,Math.round(c.radius*1000)-25);
+        SeekBar opacity = slider(layout,"Opacity",80,Math.round(c.opacity*100)-10);
+        new AlertDialog.Builder(activity).setTitle(c.label).setView(layout)
+            .setPositiveButton("Save",(d,w)->{
+                if (c.kind == BUTTON) {
+                    c.action = ACTION_KEYS[action.getSelectedItemPosition()];
+                    // Keep familiar default labels, show the chosen action on custom buttons.
+                    if (c.id.startsWith("custom")) c.label = ACTION_NAMES[action.getSelectedItemPosition()].split(" / ")[0];
                 }
-            } else if (target == TOOLBAR_EXPORT || target == TOOLBAR_IMPORT) {
-                reset();
-                ((HaloActivity) getContext()).chooseLayoutFile(target == TOOLBAR_EXPORT, exportLayout());
-            } else if (target >= 0) {
-                dragPointer = id;
-                dragControl = target;
-                dragOffsetX = x - layout.x(target);
-                dragOffsetY = y - layout.y(target);
-            }
-        } else if (action == MotionEvent.ACTION_MOVE && dragPointer >= 0) {
-            int pointer = event.findPointerIndex(dragPointer);
-            if (pointer >= 0) {
-                layout.move(dragControl, logical(event.getX(pointer)) - dragOffsetX,
-                    logical(event.getY(pointer)) - dragOffsetY);
-            }
-        } else if (action == MotionEvent.ACTION_CANCEL
-                || ((action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP) && id == dragPointer)) {
-            dragPointer = -1;
-            dragControl = -1;
-        }
+                c.radius = (size.getProgress()+25)/1000f; c.opacity = (opacity.getProgress()+10)/100f;
+                bound(c); save(); invalidate();
+            }).setNegativeButton("Cancel",null)
+            .setNeutralButton("Remove",(d,w)->{controls.remove(c); save(); invalidate();}).show();
     }
-
-    // ---------- the buttons' names, from the player's profile
-
-    private void readBindings() {
-        int serial = nativeBindings(bindingsRead);
-        if (serial == 0 || serial == bindingsSerial)
-            return;
-        bindingsSerial = serial;
-        if (!Arrays.equals(bindingsRead, bindings)) {
-            System.arraycopy(bindingsRead, 0, bindings, 0, bindings.length);
-            invalidate();
-        }
+    public void options() {
+        releaseAll();
+        String[] choices = {"Aim sensitivity", "Add button", "Reset layout", "Help", "General settings", "Export layout", "Import layout", "Single-player cheats", "Import disc movies", "Camera mode", "Layout presets"};
+        new AlertDialog.Builder(activity).setTitle("Touch controls").setItems(choices,(d,which)->{
+            if (which == 0) {
+                LinearLayout layout = dialogLayout();
+                SeekBar value = slider(layout,"Aim sensitivity (0.25 to 5)",475,Math.round(sensitivity*100)-25);
+                new AlertDialog.Builder(activity).setTitle("Aim sensitivity").setView(layout)
+                    .setPositiveButton("Save",(a,b)->{sensitivity=(value.getProgress()+25)/100f;save();})
+                    .setNegativeButton("Cancel",null).show();
+            } else if (which == 1) {
+                if (controls.size() >= TouchConfiguration.LIMIT) return;
+                settings.overlayDisabled = false; saveFeatures();
+                editing = true; menuTouch = false;
+                add("custom"+System.nanoTime(),"NEW",BUTTON,PAD,.5f,.5f,.065f);
+                save(); invalidate(); editControl(controls.get(controls.size()-1));
+            } else if (which == 2) {
+                new AlertDialog.Builder(activity).setMessage("Restore the default touchscreen layout and button actions?")
+                    .setPositiveButton("Reset",(a,b)->{defaults(); for(Control c:controls)bound(c);save();invalidate();})
+                    .setNegativeButton("Cancel",null).show();
+            } else if (which == 3) new AlertDialog.Builder(activity).setTitle("How to play")
+                .setMessage("MOVE: slide for analog movement. AIM: swipe to look. You can move, aim and hold fire together.\n\nMenus automatically use direct taps, including the profile keyboard. Tap letters and DONE to save your name. PAD shows controller buttons: arrows move, A selects, B cancels, X deletes and START finishes the name. TOUCH returns to tapping. In gameplay, MENU opens pause.\n\nEDIT: drag any control to move it. Tap a control to change its size, opacity and button action, or remove it. DONE saves the layout. OPTIONS lets you add buttons, reset the layout or change aim sensitivity.\n\nThe buttons are a gamepad, so they cannot type keyboard letters accidentally. Gameplay actions follow your controller profile.")
+                .setPositiveButton("OK",null).show();
+            else if (which == 4) generalSettings();
+            else if (which == 5 || which == 6) ((HaloActivity)activity).chooseLayoutFile(which == 5, exportLayout());
+            else if (which == 7) cheatSettings();
+            else if (which == 8) {
+                android.content.Intent intent = new android.content.Intent(activity, LauncherActivity.class);
+                intent.putExtra("import-movies", true); activity.startActivity(intent);
+            } else if (which == 9) nativeCameraMode();
+            else if (which == 10) layoutPresets();
+        }).show();
     }
-
-    /** a control's name: its button and what the profile has it do ("A / Jump", "Fire", "RT") */
-    private String label(int type) {
-        Kind kind = KINDS[type];
-        if (kind.gamepadButton < 0)
-            return kind.buttonName;
-        int control = bindings[kind.gamepadButton];
-        if (control < 0 || control >= GAME_CONTROLS.length)
-            return kind.buttonName;
-        return kind.faceButton ? kind.buttonName + " / " + GAME_CONTROLS[control] : GAME_CONTROLS[control];
+    private void layoutPresets() {
+        new AlertDialog.Builder(activity).setTitle("Layout presets")
+            .setItems(new String[]{"OpenCE-Touch default", "fqlx compact"}, (dialog, selected) ->
+                new AlertDialog.Builder(activity)
+                    .setMessage("Replace the current button layout? Export it first to keep a copy. Your general settings stay the same.")
+                    .setPositiveButton("Apply", (confirmation, button) -> {
+                        releaseAll();
+                        if (selected == 0) defaults();
+                        else {
+                            controls.clear();
+                            for (TouchConfiguration.Button b : TouchConfiguration.compactLayout().buttons) {
+                                Control c = new Control(b.id, b.label, b.kind, b.action, b.x, b.y, b.radius);
+                                c.opacity = b.opacity; controls.add(c);
+                            }
+                        }
+                        settings.overlayDisabled = false;
+                        for (Control c : controls) bound(c);
+                        save(); saveFeatures(); invalidate();
+                    }).setNegativeButton("Cancel", null).show()).show();
     }
+    // Mobile features adapted from theLlamaNet / FulGer. SDL virtual input stays in TouchInput.
+    private final TouchConfiguration settings = new TouchConfiguration();
+    private final GyroscopeAim gyroAim = new GyroscopeAim();
+    private final float[] gyroDelta = new float[2];
+    private android.hardware.SensorManager sensors;
+    private android.hardware.Sensor gyroscope;
+    private android.os.Vibrator vibrator;
+    private boolean deviceInputActive, gyroRegistered, movieActive;
+    private int currentFps, menuContext;
+    private StartupCheats startupCheats;
+    private static native int nativeRumble();
+    private static native void nativeLookReset();
+    private static native void nativeCameraMode();
+    private static native boolean nativeCheatRequest(int id, boolean enabled);
+    private static native int nativeCheatStatus(int id);
+    private static native void nativeFieldOfView(float degrees);
+    private static native void nativeHudLayout(float[] offsets);
+    private static native int[] nativeMenuPoll();
+    private static native void nativeMenuPublish(int revision, int page, boolean editing,
+        String title, String[] labels, int[] actions, int[] values);
 
-    private String controlName(int type) {
-        return type == TouchLayout.LEFT ? "Move stick" : label(type);
+    private void loadFeatures() {
+        settings.gyro = prefs.getBoolean("gyro", false); settings.rumble = prefs.getBoolean("rumble", true);
+        settings.fps = prefs.getBoolean("fps", false); settings.icons = prefs.getBoolean("icons", true);
+        settings.overlayDisabled = prefs.getBoolean("overlay-disabled", false);
+        settings.gyroSensitivity = prefs.getFloat("gyro-sensitivity", 1f);
+        if (!Float.isFinite(settings.gyroSensitivity) || settings.gyroSensitivity < .25f || settings.gyroSensitivity > 4f) settings.gyroSensitivity = 1f;
+        settings.fov = prefs.getFloat("fov", 70f);
+        if (!Float.isFinite(settings.fov) || settings.fov < 55f || settings.fov > 90f) settings.fov = 70f;
+        nativeFieldOfView(settings.fov);
+        sensors = (android.hardware.SensorManager)activity.getSystemService(android.content.Context.SENSOR_SERVICE);
+        gyroscope = sensors == null ? null : sensors.getDefaultSensor(android.hardware.Sensor.TYPE_GYROSCOPE);
+        vibrator = (android.os.Vibrator)activity.getSystemService(android.content.Context.VIBRATOR_SERVICE);
+        java.io.File root = activity.getExternalFilesDir(null);
+        if (root != null) try { startupCheats = new StartupCheats(new java.io.File(root,"init.txt").toPath()); }
+        catch (java.io.IOException e) { toast("Cannot read startup cheats: " + e.getMessage()); }
+        // Native Halo menus expose Porting options; Android dialogs provide the settings pages.
+        nativeMenuPublish(1, 0, false, "Porting options", new String[0], new int[0], new int[0]);
     }
-
-    // ---------- the layout, saved and in files
-
-    private boolean saveLayout() {
-        boolean saved = preferences.edit().putString(KEY_CONFIGURATION, exportLayout()).commit();
-        if (!saved)
-            Toast.makeText(getContext(), "The touch layout could not be saved. Try again.", Toast.LENGTH_LONG).show();
-        return saved;
+    private void saveFeatures() {
+        prefs.edit().putBoolean("gyro", settings.gyro).putBoolean("rumble", settings.rumble)
+            .putBoolean("fps",settings.fps).putBoolean("icons",settings.icons)
+            .putBoolean("overlay-disabled",settings.overlayDisabled)
+            .putFloat("gyro-sensitivity",settings.gyroSensitivity).putFloat("fov",settings.fov).apply();
+        nativeFieldOfView(settings.fov); updateSensors(); invalidate();
     }
-
-    public String exportLayout() {
-        return layout.exportConfiguration(sensitivity);
+    private void toast(String s) { android.widget.Toast.makeText(activity,s,android.widget.Toast.LENGTH_LONG).show(); }
+    public void startDeviceInput() { deviceInputActive = true; updateSensors(); }
+    public void stopDeviceInput() {
+        deviceInputActive = false; updateSensors();
+        if (vibrator != null) try { vibrator.cancel(); } catch (RuntimeException ignored) {}
+        releaseAll();
     }
-
-    /** replaces the layout with a layout file's (saved first: it throws if the file is not valid) */
-    public void importLayout(String text) {
-        TouchLayout.Configuration imported = TouchLayout.importConfiguration(text);
-        imported.layout.bounds(logicalWidth, logicalHeight);
-        imported.layout.setMinimumRadius(minimumRadius());
-        String normalized = imported.layout.exportConfiguration(imported.sensitivity);
-        if (!preferences.edit().putString(KEY_CONFIGURATION, normalized).commit())
-            throw new IllegalArgumentException("Could not save the imported layout");
-        reset();
-        layout = imported.layout;
-        sensitivity = imported.sensitivity;
-        setHidden(false);
-        cancelRumble();
-        invalidate();
+    public void suspendForMovie(boolean suspended) {
+        movieActive = suspended; releaseAll(); updateSensors();
+        if (vibrator != null) try { vibrator.cancel(); } catch (RuntimeException ignored) {}
     }
-
-    // ---------- the options
-
-    /** opens an option dialog; the controls are released while any is open, and saved when the last closes */
-    private void openDialog(AlertDialog dialog) {
-        dialog.setOnDismissListener(d -> {
-            openDialogs--;
-            if (openDialogs > 0)
-                return;
-            openDialogs = 0;
-            saveLayout();
-            reset();
-            updateSensors();
-        });
-        openDialogs++;
-        reset();
-        dialog.show();
-    }
-
-    private void showOptions() {
-        String[] items = {"General", "Edit buttons layout", "Look sensitivity"};
-        AlertDialog dialog = new AlertDialog.Builder(getContext())
-            .setTitle("Options")
-            .setItems(items, (d, which) -> {
-                if (which == 0) {
-                    post(this::showGeneral);
-                } else if (which == 1) {
-                    editing = true;
-                    setHidden(false);
-                } else {
-                    post(this::showSensitivity);
-                }
-            })
-            .setNegativeButton("Close", null)
-            .create();
-        openDialog(dialog);
-    }
-
-    private TextView text(String value) {
-        TextView view = new TextView(getContext());
-        view.setText(value);
-        return view;
-    }
-
-    private Button button(String label, View.OnClickListener listener) {
-        Button button = new Button(getContext());
-        button.setText(label);
-        button.setOnClickListener(listener);
-        return button;
-    }
-
-    private void showGeneral() {
-        cancelRumble();
-        LinearLayout panel = new LinearLayout(getContext());
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(24, 16, 24, 16);
-
-        boolean hasRumble = vibrator != null && vibrator.hasVibrator();
-        Switch rumble = new Switch(getContext());
-        rumble.setText(hasRumble ? "Vibration" : "Vibration (not on this phone)");
-        rumble.setChecked(layout.rumbleEnabled);
-        rumble.setEnabled(hasRumble);
-        rumble.setOnCheckedChangeListener((view, enabled) -> {
-            layout.rumbleEnabled = enabled;
-            cancelRumble();
-            saveLayout();
-        });
-        panel.addView(rumble);
-
-        Switch gyro = new Switch(getContext());
-        gyro.setText(gyroscope != null ? "Gyroscope aiming (experimental)" : "Gyroscope aiming (not on this phone)");
-        gyro.setChecked(layout.gyroscopeEnabled);
-        gyro.setEnabled(gyroscope != null);
-        gyro.setOnCheckedChangeListener((view, enabled) -> {
-            layout.gyroscopeEnabled = enabled;
-            gyroAim.reset();
-            saveLayout();
-        });
-        panel.addView(gyro);
-
-        Switch floating = new Switch(getContext());
-        floating.setText("Floating move stick: it goes where your thumb lands in the lower left");
-        floating.setChecked(layout.floatingStick);
-        floating.setOnCheckedChangeListener((view, enabled) -> {
-            layout.floatingStick = enabled;
-            saveLayout();
-        });
-        panel.addView(floating);
-
-        TextView opacityLabel = text("");
-        SeekBar opacity = new SeekBar(getContext());
-        int steps = Math.round((TouchLayout.MAX_OPACITY - TouchLayout.MIN_OPACITY) * 20);
-        opacity.setMax(steps);
-        opacity.setProgress(Math.round((layout.opacity - TouchLayout.MIN_OPACITY) * 20));
-        Runnable showOpacity = () -> opacityLabel.setText(String.format(Locale.US, "Opacity: %d%%",
-            Math.round(layout.opacity * 100)));
-        showOpacity.run();
-        opacity.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar bar, int progress, boolean user) {
-                layout.setOpacity(Math.min(TouchLayout.MAX_OPACITY, TouchLayout.MIN_OPACITY + progress / 20f));
-                showOpacity.run();
-                invalidate();
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar bar) {
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar bar) {
-                saveLayout();
-            }
-        });
-        panel.addView(opacityLabel);
-        panel.addView(opacity);
-
-        AlertDialog dialog = new AlertDialog.Builder(getContext())
-            .setTitle("General")
-            .setView(panel)
-            .setPositiveButton("Done", null)
-            .create();
-        panel.addView(button("Hide or add buttons", view -> {
-            dialog.dismiss();
-            post(this::showButtonManager);
-        }));
-        panel.addView(button("Edit buttons size", view -> {
-            dialog.dismiss();
-            post(this::showButtonSizes);
-        }));
-        openDialog(dialog);
-    }
-
-    private String rowName(int control, boolean withHidden) {
-        String name = controlName(layout.type(control));
-        if (control >= TouchLayout.BASE_COUNT)
-            name += " (copy)";
-        if (withHidden && !layout.shown(control))
-            name += " (hidden)";
-        return name;
-    }
-
-    private LinearLayout row(int control, boolean withHidden) {
-        LinearLayout row = new LinearLayout(getContext());
-        row.setPadding(16, 4, 16, 4);
-        TextView name = text(rowName(control, withHidden));
-        name.setTextColor(Color.WHITE);
-        row.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        return row;
-    }
-
-    private void showButtonSizes() {
-        LinearLayout list = new LinearLayout(getContext());
-        list.setOrientation(LinearLayout.VERTICAL);
-        for (int i = 0; i < layout.size(); i++) {
-            final int control = i;
-            LinearLayout row = row(control, true);
-            TextView value = text("");
-            value.setTextColor(Color.WHITE);
-            Button smaller = new Button(getContext());
-            Button larger = new Button(getContext());
-            Runnable refresh = () -> {
-                int percent = Math.round(layout.sizeScale(control) * 100);
-                value.setText(percent + "%");
-                smaller.setEnabled(percent > Math.round(TouchLayout.MIN_SIZE * 100));
-                larger.setEnabled(percent < Math.round(TouchLayout.MAX_SIZE * 100));
-            };
-            smaller.setText("-");
-            smaller.setOnClickListener(view -> resize(control, -10, refresh));
-            larger.setText("+");
-            larger.setOnClickListener(view -> resize(control, 10, refresh));
-            row.addView(smaller);
-            row.addView(value);
-            row.addView(larger);
-            list.addView(row);
-            refresh.run();
-        }
-        ScrollView scroll = new ScrollView(getContext());
-        scroll.addView(list);
-        openDialog(new AlertDialog.Builder(getContext())
-            .setTitle("Edit buttons size")
-            .setView(scroll)
-            .setPositiveButton("Done", null)
-            .create());
-    }
-
-    private void resize(int control, int percent, Runnable refresh) {
-        int size = Math.round(layout.sizeScale(control) * 100) + percent;
-        size = Math.max(Math.round(TouchLayout.MIN_SIZE * 100), Math.min(Math.round(TouchLayout.MAX_SIZE * 100), size));
-        layout.setSize(control, size / 100f);
-        saveLayout();
-        refresh.run();
-        invalidate();
-    }
-
-    private void showButtonManager() {
-        LinearLayout list = new LinearLayout(getContext());
-        list.setOrientation(LinearLayout.VERTICAL);
-        Runnable[] refresh = new Runnable[1];
-        refresh[0] = () -> {
-            list.removeAllViews();
-            for (int i = 0; i < layout.size(); i++) {
-                final int control = i;
-                LinearLayout row = row(control, false);
-                row.addView(button(layout.shown(control) ? "Hide" : "Show", view -> {
-                    reset();
-                    layout.setShown(control, !layout.shown(control));
-                    saveLayout();
-                    refresh[0].run();
-                    invalidate();
-                }));
-                if (layout.type(control) != TouchLayout.LEFT) {
-                    row.addView(button("Duplicate", view -> {
-                        reset();
-                        if (layout.duplicate(control) < 0)
-                            toast("At most " + TouchLayout.MAX_CONTROLS + " controls. Reset removes the copies.");
-                        else
-                            saveLayout();
-                        refresh[0].run();
-                        invalidate();
-                    }));
-                }
-                list.addView(row);
-            }
-        };
-        refresh[0].run();
-        ScrollView scroll = new ScrollView(getContext());
-        scroll.addView(list);
-        AlertDialog dialog = new AlertDialog.Builder(getContext())
-            .setTitle("Hide or add buttons")
-            .setView(scroll)
-            .setPositiveButton("Done", null)
-            .setNegativeButton("Reset", null)
-            .setNeutralButton("Add button", null)
-            .create();
-        openDialog(dialog);
-        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(view -> confirmReset(refresh[0]));
-        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(view -> chooseButtonToAdd(refresh[0]));
-    }
-
-    private void confirmReset(Runnable refresh) {
-        new AlertDialog.Builder(getContext())
-            .setTitle("Reset the buttons?")
-            .setMessage("This puts every button back in its place and size, shows them all and removes the copies.")
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Reset", (d, which) -> {
-                reset();
-                layout.resetDefaults();
-                setHidden(false);
-                saveLayout();
-                refresh.run();
-                invalidate();
-            })
-            .show();
-    }
-
-    private void chooseButtonToAdd(Runnable refresh) {
-        String[] names = new String[TouchLayout.BASE_COUNT];
-        for (int i = 0; i < names.length; i++)
-            names[i] = controlName(i);
-        new AlertDialog.Builder(getContext())
-            .setTitle("Add button")
-            .setItems(names, (d, type) -> {
-                reset();
-                if (layout.add(type) < 0)
-                    toast(type == TouchLayout.LEFT ? "The move stick already shows." : "At most " + TouchLayout.MAX_CONTROLS + " controls.");
-                else
-                    saveLayout();
-                refresh.run();
-                invalidate();
-            })
-            .setNegativeButton("Cancel", null)
-            .show();
-    }
-
-    private void showSensitivity() {
-        LinearLayout panel = new LinearLayout(getContext());
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(32, 16, 32, 16);
-        TextView value = text("");
-        SeekBar slider = new SeekBar(getContext());
-        int steps = Math.round((TouchLayout.MAX_SENSITIVITY - TouchLayout.MIN_SENSITIVITY) / 0.025f);
-        slider.setMax(steps);
-        slider.setProgress(Math.round((sensitivity - TouchLayout.MIN_SENSITIVITY) / 0.025f));
-        Runnable showValue = () -> value.setText(String.format(Locale.US, "Look sensitivity: %.2fx", sensitivity));
-        showValue.run();
-        slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar bar, int progress, boolean user) {
-                sensitivity = Math.min(TouchLayout.MAX_SENSITIVITY, TouchLayout.MIN_SENSITIVITY + progress * 0.025f);
-                showValue.run();
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar bar) {
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar bar) {
-                saveLayout();
-            }
-        });
-        panel.addView(value);
-        panel.addView(slider);
-        openDialog(new AlertDialog.Builder(getContext())
-            .setTitle("Look sensitivity")
-            .setView(panel)
-            .setPositiveButton("Done", null)
-            .create());
-    }
-
-    private void toast(String message) {
-        Toast.makeText(getContext(), message, Toast.LENGTH_LONG).show();
-    }
-
-    // ---------- the gyroscope and the vibration
-
     private void updateSensors() {
-        boolean needed = deviceInputActive && showing && !hidden && layout.gyroscopeEnabled && gyroscope != null;
-        if (needed && !gyroRegistered) {
-            gyroAim.reset();
-            gyroRegistered = sensors.registerListener(this, gyroscope, SensorManager.SENSOR_DELAY_GAME);
-        } else if (!needed && gyroRegistered) {
-            sensors.unregisterListener(this);
-            gyroRegistered = false;
-            gyroAim.reset();
-        }
+        boolean needed = deviceInputActive && !menus && !editing && !hudEditing && !movieActive && !settings.overlayDisabled && settings.gyro && gyroscope != null;
+        if (needed && !gyroRegistered) { gyroAim.reset(); gyroRegistered = sensors.registerListener(this,gyroscope,android.hardware.SensorManager.SENSOR_DELAY_GAME); }
+        else if (!needed && gyroRegistered) { sensors.unregisterListener(this); gyroRegistered = false; gyroAim.reset(); }
+    }
+    @Override public void onAccuracyChanged(android.hardware.Sensor sensor, int accuracy) {}
+    @Override public void onSensorChanged(android.hardware.SensorEvent event) {
+        if (!deviceInputActive || !settings.gyro || menus || editing || hudEditing || movieActive || settings.overlayDisabled) { gyroAim.reset(); return; }
+        int rotation = activity.getWindowManager().getDefaultDisplay().getRotation();
+        if (gyroAim.sample(event.timestamp,event.values[0],event.values[1],rotation,gyroDelta))
+            mouseMove(-gyroDelta[0]/.0022f*settings.gyroSensitivity,-gyroDelta[1]/.0022f*settings.gyroSensitivity,true);
+    }
+    private void pollFeatures() {
+        updateSensors();
+        if (!deviceInputActive || movieActive) return;
+        int[] state = nativeMenuPoll();
+        if (state != null) { currentFps = state[5]; menuContext = state[1]; if (state[2] == 90 && hudEditing) finishHudEditor(); else if (state[2] == 1 && !hudEditing) options(); }
+        if (vibrator != null && vibrator.hasVibrator()) try {
+            int amplitude = settings.rumble && !menus && !editing && !settings.overlayDisabled ? nativeRumble() : 0;
+            if (amplitude > 0) vibrator.vibrate(android.os.VibrationEffect.createOneShot(110,
+                vibrator.hasAmplitudeControl() ? amplitude : android.os.VibrationEffect.DEFAULT_AMPLITUDE));
+            else vibrator.cancel();
+        } catch (RuntimeException ignored) {}
+        if (settings.fps) invalidate();
+    }
+    private static int iconFor(int action) {
+        if (action == CAMERA) return 18;
+        int[] map = {0,1,2,3,11,-1,10,6,7,8,9,12,13,14,15,5,4};
+        int i = action - PAD; return i >= 0 && i < map.length ? map[i] : -1;
+    }
+    private void generalSettings() {
+        String[] rows = {"Gyroscope: " + (gyroscope == null ? "unavailable" : settings.gyro ? "ON" : "OFF"),
+            "Gyroscope sensitivity", "Rumble: " + (vibrator == null || !vibrator.hasVibrator() ? "unavailable" : settings.rumble ? "ON" : "OFF"),
+            "FPS counter: " + (settings.fps ? "ON" : "OFF"), "Field of view: " + Math.round(settings.fov),
+            "Halo icons: " + (settings.icons ? "ON" : "OFF"), "Disable overlay: " + (settings.overlayDisabled ? "ON" : "OFF"), "Edit in-game HUD"};
+        new AlertDialog.Builder(activity).setTitle("General settings").setItems(rows,(d,i)->{
+            releaseAll();
+            if (i == 7) { hudEditing = true; hudPointer = hudPanel = -1;
+                nativeMenuPublish(2, 1, true, "HUD layout", new String[0], new int[0], new int[0]);
+                updateSensors(); invalidate(); return; }
+            if (i == 0 && gyroscope != null) settings.gyro = !settings.gyro;
+            else if (i == 1 || i == 4) {
+                boolean fov = i == 4; LinearLayout layout = dialogLayout();
+                SeekBar value = slider(layout,fov ? "Field of view (55–90 degrees)" : "Gyroscope sensitivity (0.25–4)",
+                    fov ? 35 : 375, Math.round(fov ? settings.fov-55 : (settings.gyroSensitivity-.25f)*100));
+                new AlertDialog.Builder(activity).setTitle(fov ? "Field of view" : "Gyroscope sensitivity").setView(layout)
+                    .setPositiveButton("Save",(a,b)->{ if (fov) settings.fov=55+value.getProgress(); else settings.gyroSensitivity=.25f+value.getProgress()/100f; saveFeatures(); })
+                    .setNegativeButton("Cancel",null).show();return;
+            } else if (i == 2) settings.rumble = !settings.rumble;
+            else if (i == 3) settings.fps = !settings.fps;
+            else if (i == 5) settings.icons = !settings.icons;
+            else if (i == 6) settings.overlayDisabled = !settings.overlayDisabled;
+            saveFeatures(); generalSettings();
+        }).setNegativeButton("Close",null).show();
     }
 
-    @Override
-    public void onSensorChanged(SensorEvent event) {
-        if (!deviceInputActive || !showing || hidden || !layout.gyroscopeEnabled || editing || openDialogs > 0) {
-            gyroAim.reset();
-            return;
+    private void drawHudEditor(Canvas canvas) {
+        paint.setStyle(Paint.Style.FILL); paint.setAlpha(255);
+        for (int panel = 0; panel < HudLayout.COUNT; panel++) {
+            float[] b = hud.bounds(panel, getWidth(), getHeight());
+            paint.setColor(panel == hudPanel ? 0x7783d9ff : 0x55304050);
+            canvas.drawRoundRect(b[0], b[1], b[2], b[3], dp(10), dp(10), paint);
+            paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(dp(2)); paint.setColor(Color.WHITE);
+            canvas.drawRoundRect(b[0], b[1], b[2], b[3], dp(10), dp(10), paint);
+            paint.setStyle(Paint.Style.FILL); paint.setTextAlign(Paint.Align.CENTER); paint.setTextSize(dp(16));
+            canvas.drawText(HudLayout.name(panel), (b[0]+b[2])/2, (b[1]+b[3])/2, paint);
         }
-        int rotation = ((WindowManager) getContext().getSystemService(Context.WINDOW_SERVICE))
-            .getDefaultDisplay().getRotation();
-        if (gyroAim.sample(event.timestamp, event.values[0], event.values[1], rotation, gyroDelta)) {
-            // as a swipe of this many logical units (which the profile's invert leaves alone)
-            nativeGyro(-gyroDelta[0] / LOOK_RADIANS_PER_UNIT * sensitivity,
-                -gyroDelta[1] / LOOK_RADIANS_PER_UNIT * sensitivity);
-        }
-    }
-
-    @Override
-    public void onAccuracyChanged(Sensor sensor, int accuracy) {
-    }
-
-    /** the phone vibrates as port 0's controller would, while the controls show */
-    private void updateRumble() {
-        if (vibrator == null || !vibrator.hasVibrator())
-            return;
-        boolean active = showing && !hidden && layout.rumbleEnabled && !editing && openDialogs == 0;
-        int amplitude = active ? nativeRumble() : 0;
-        if (amplitude == 0) {
-            cancelRumble();
-            return;
-        }
-        long now = SystemClock.uptimeMillis();
-        if (amplitude == lastAmplitude && now - lastVibration < VIBRATION_RENEW_MS)
-            return;
-        try {
-            int strength = vibrator.hasAmplitudeControl() ? amplitude : VibrationEffect.DEFAULT_AMPLITUDE;
-            vibrator.vibrate(VibrationEffect.createOneShot(VIBRATION_MS, strength), rumbleAttributes);
-            lastAmplitude = amplitude;
-            lastVibration = now;
-        } catch (RuntimeException e) {
-            cancelRumble();
-        }
-    }
-
-    private void cancelRumble() {
-        if (lastAmplitude != 0 && vibrator != null) {
-            try {
-                vibrator.cancel();
-            } catch (RuntimeException ignored) {
-                // the vibrator may already be gone with the activity
-            }
-        }
-        lastAmplitude = 0;
-    }
-
-    // ---------- drawing
-
-    private static int alpha(int color, float opacity) {
-        int alpha = Math.round(Color.alpha(color) * opacity);
-        return (color & 0x00ffffff) | (Math.max(0, Math.min(255, alpha)) << 24);
-    }
-
-    private void circle(Canvas canvas, float x, float y, float radius, String label, boolean active,
-            float textSize, float opacity) {
-        paint.setStyle(Paint.Style.FILL);
-        paint.setColor(alpha(active ? 0x9983d9ff : 0x55304050, opacity));
-        canvas.drawCircle(x, y, radius, paint);
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(2);
-        paint.setColor(alpha(active ? 0xffaee7ff : 0xffffffff, opacity));
-        canvas.drawCircle(x, y, radius, paint);
-        paint.setStyle(Paint.Style.FILL);
-        paint.setColor(alpha(Color.WHITE, Math.max(opacity, 0.5f)));
+        toolbar(canvas, editRect, "SAVE"); toolbar(canvas, menuRect, "RESET");
+        paint.setColor(Color.WHITE); paint.setAlpha(255); paint.setTextSize(dp(12));
         paint.setTextAlign(Paint.Align.CENTER);
-        paint.setTextSize(textSize);
-        // (a long name, "Y / Weapon", is made smaller to fit inside the circle)
-        float width = paint.measureText(label);
-        if (width > radius * LABEL_WIDTH) {
-            textSize *= radius * LABEL_WIDTH / width;
-            paint.setTextSize(textSize);
-        }
-        canvas.drawText(label, x, y + textSize * 0.36f, paint);
+        canvas.drawText("Drag the panels, then SAVE. Back also saves.", getWidth()/2f, editRect.bottom+dp(18), paint);
     }
-
-    /** a toolbar item: never fainter than half, so that it can always be found */
-    private void toolbarItem(Canvas canvas, float x, float radius, String label) {
-        circle(canvas, x, toolbarY(), toolbarRadius(radius), label, false, 11, Math.max(layout.opacity, 0.5f));
-    }
-
-    private void drawToolbar(Canvas canvas) {
-        if (editing) {
-            toolbarItem(canvas, optionsX(), OPTIONS_RADIUS, "Save");
-            toolbarItem(canvas, optionsX() - 156, OPTIONS_RADIUS, "Export");
-            toolbarItem(canvas, optionsX() - 78, OPTIONS_RADIUS, "Import");
-            paint.setColor(Color.WHITE);
-            paint.setTextSize(14);
-            canvas.drawText("Drag the controls, then push Save", logicalWidth / 2, toolbarY() + 58, paint);
-        } else {
-            toolbarItem(canvas, logicalWidth / 2, TOOLBAR_RADIUS, hidden ? "Touch" : "Hide");
-            toolbarItem(canvas, optionsX(), OPTIONS_RADIUS, "Options");
-        }
-    }
-
-    private void drawStick(Canvas canvas) {
-        int stick = TouchLayout.LEFT;
-        float radius = layout.radius(stick);
-        float size = layout.sizeScale(stick);
-        // (a floating stick near an edge is drawn whole, nearer the middle than its centre)
-        float x = Math.max(radius, Math.min(logicalWidth - radius, stickCenterX()));
-        float y = Math.max(radius, Math.min(logicalHeight - radius, stickCenterY()));
-        circle(canvas, x, y, radius, "Move", false, 11 * size, layout.opacity);
-        circle(canvas, x + axes[0] / 32767f * radius, y + axes[1] / 32767f * radius,
-            Math.max(STICK_KNOB_RADIUS * size, radius * 0.375f), "", held(stick), 11, layout.opacity);
-    }
-
-    @Override
-    protected void onDraw(Canvas canvas) {
-        if (!showing && !editing)
-            return;
-        canvas.save();
-        canvas.scale(scale, scale);
-        if (!hidden || editing) {
-            if (layout.shown(TouchLayout.LEFT))
-                drawStick(canvas);
-            for (int i = 0; i < layout.size(); i++) {
-                if (!layout.shown(i) || layout.type(i) == TouchLayout.LEFT)
-                    continue;
-                float textSize = 11 * Math.max(layout.sizeScale(i), layout.radius(i) / 36f);
-                circle(canvas, layout.x(i), layout.y(i), layout.radius(i), label(layout.type(i)),
-                    held(i) || dragControl == i, Math.min(textSize, 16), layout.opacity);
+    private boolean hudTouch(MotionEvent event) {
+        int action = event.getActionMasked(), index = event.getActionIndex(), id = event.getPointerId(index);
+        if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
+            if (hudPointer < 0) {
+                float x = event.getX(index), y = event.getY(index);
+                if (editRect.contains(x,y)) { finishHudEditor(); performClick(); return true; }
+                if (menuRect.contains(x,y)) { hud.reset(); nativeHudLayout(hud.offsets()); invalidate(); performClick(); return true; }
+                hudPanel = hud.hit(x,y,getWidth(),getHeight());
+                if (hudPanel >= 0) { hudPointer=id; hudLastX=x; hudLastY=y; }
             }
+        } else if (action == MotionEvent.ACTION_MOVE && hudPointer >= 0) {
+            int pointer=event.findPointerIndex(hudPointer);
+            if (pointer >= 0) {
+                float x=event.getX(pointer), y=event.getY(pointer);
+                hud.move(hudPanel,x-hudLastX,y-hudLastY,getWidth(),getHeight());
+                hudLastX=x; hudLastY=y; nativeHudLayout(hud.offsets()); invalidate();
+            }
+        } else if (action == MotionEvent.ACTION_CANCEL ||
+                   ((action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP) && id == hudPointer)) {
+            hudPointer=hudPanel=-1; persistHudEditor(); invalidate();
         }
-        drawToolbar(canvas);
-        canvas.restore();
+        return true;
+    }
+    public void persistHudEditor() {
+        if (hudEditing && !prefs.edit().putString("hud-layout",hud.save()).commit())
+            toast("Could not save the HUD layout. Try SAVE again.");
+    }
+    public boolean finishHudEditor() {
+        if (!hudEditing) return false;
+        if (!prefs.edit().putString("hud-layout",hud.save()).commit()) {
+            toast("Could not save the HUD layout. Try again."); return true;
+        }
+        hudEditing=false; hudPointer=hudPanel=-1;
+        nativeMenuPublish(1, 0, false, "Porting options", new String[0], new int[0], new int[0]);
+        releaseAll(); updateSensors(); invalidate();
+        generalSettings(); return true;
+    }
+
+    private static final String[] CHEATS = {"Invincibility","Jetpack","Infinite ammo","Bump possession","Super jump","Reflexive damage","Medusa","Omnipotent","Controller cheats","Bottomless clip","Active camouflage (player)","Active camouflage","All powerups","All vehicles","All weapons","Teleport to camera"};
+    private void cheatSettings() {
+        String[] rows = CHEATS.clone();
+        boolean startup = menuContext == 1;
+        for (int i=0;i<rows.length;i++) if (i<10 || startup) rows[i] += startup ? startupCheats != null && startupCheats.enabled(i) ? ": ON" : ": OFF" : nativeCheatStatus(i)==1 ? ": ON" : ": OFF";
+        new AlertDialog.Builder(activity).setTitle(startup ? "Startup cheats (single-player)" : "Single-player cheats").setItems(rows,(d,i)->{
+            if (startup) { if (startupCheats != null) try { startupCheats.toggle(i); } catch (java.io.IOException e) { toast("Cannot save cheats: "+e.getMessage()); } }
+            else if (!nativeCheatRequest(i,i>=10 || nativeCheatStatus(i)!=1)) toast("Cheat request is busy");
+            cheatSettings();
+        }).setNegativeButton("Close",null).show();
+    }
+    public String exportLayout() {
+        TouchConfiguration c = settings; c.buttons.clear(); c.sensitivity = sensitivity;
+        for (Control control: controls) {
+            TouchConfiguration.Button b=new TouchConfiguration.Button(); b.id=control.id;b.label=control.label;b.kind=control.kind;b.action=control.action;
+            b.x=control.x;b.y=control.y;b.radius=control.radius;b.opacity=control.opacity;c.buttons.add(b);
+        }
+        return c.encode();
+    }
+    public void importLayout(String text) {
+        TouchConfiguration c=TouchConfiguration.decode(text); ArrayList<Control> next=new ArrayList<>();
+        for (TouchConfiguration.Button b:c.buttons) { Control control=new Control(b.id,b.label,b.kind,b.action,b.x,b.y,b.radius);control.opacity=b.opacity;next.add(control); }
+        releaseAll(); controls.clear(); controls.addAll(next); sensitivity=c.sensitivity;
+        settings.gyro=c.gyro;settings.gyroSensitivity=c.gyroSensitivity;settings.rumble=c.rumble;settings.fps=c.fps;settings.fov=c.fov;
+        settings.icons=c.icons;settings.overlayDisabled=c.overlayDisabled;
+        for(Control control:controls)bound(control); save();saveFeatures();
     }
 }

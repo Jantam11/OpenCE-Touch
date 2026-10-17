@@ -22,12 +22,17 @@ Conventions carried over from the Xbox:
 */
 
 #include "xgpu.h"
+#include "ui_overlay.h"
 #include "sdl_platform.h"
 #include "halo_ui_pointer.h"
 #include "port_config.h"
+#ifdef HALO_ANDROID
+#include "../../android/guest/runtime/guest_host.h"
+#endif
 #include "main/console.h"
-
+#ifndef HALO_ANDROID
 #include <SDL3/SDL.h>
+#endif
 
 #include <math.h>
 #include <stdio.h>
@@ -1600,6 +1605,8 @@ static BOOL bind_targets(BOOL *has_depth)
 
 /* ---------- device creation */
 
+static void program_adopt(GLuint vertex_shader, GLuint fragment_shader, GLuint program);
+
 static void gl_initialize(void)
 {
 	GLint major = 0, minor = 0;
@@ -1650,6 +1657,17 @@ static void gl_initialize(void)
 			(host_gl_has_extension("GL_EXT_texture_compression_dxt1") &&
 			host_gl_has_extension("GL_ANGLE_texture_compression_dxt3") &&
 			host_gl_has_extension("GL_ANGLE_texture_compression_dxt5"));
+		{
+			/* Adreno's driver takes DXT textures but drew the maps' speckled
+			(dark dots a block apart, on the ground and the walls), where
+			the game's own unpacking (xbox_textures.c, as on Mali) does not */
+			const char *decode = config_string("display.texture_decode");
+			const char *renderer = (const char *)glGetString(GL_RENDERER);
+
+			if (!strcmp(decode, "cpu") ||
+				(strcmp(decode, "gpu") && renderer && strstr(renderer, "Adreno")))
+				xgpu_capabilities.s3tc = FALSE;
+		}
 		platform_log("OpenGL ES %d.%d: copy image %d, border clamp %d, anisotropy %d, S3TC %d, sample counting %d, "
 			"base vertex %d (%s)",
 			(int)major, (int)minor, xgpu_capabilities.copy_image, xgpu_capabilities.border_clamp,
@@ -1763,6 +1781,9 @@ static void gl_initialize(void)
 		if (renderbuffer_size < maximum_target_size)
 			maximum_target_size = renderbuffer_size;
 	}
+	/* the shaders and programs of earlier runs, made now rather than in the
+	middle of the frames that first draw with them (xgpu_shader_cache.c) */
+	xgpu_shader_cache_warm(program_adopt);
 	xgpu_gl_state_invalidate();
 	device.gl_ready = TRUE;
 	if (anti_aliasing_value < 0)
@@ -1951,7 +1972,7 @@ HRESULT WINAPI Direct3D_CreateDevice(UINT adapter, D3DDEVTYPE device_type, void 
 		}
 		viewport_update_constants();
 
-		if (!config_boolean("debug.null_renderer") && platform_video_initialize(width, height))
+		if (!config_boolean("debug.null_renderer") && !platform_dedicated() && platform_video_initialize(width, height))
 			gl_initialize();
 		else
 			platform_log("Direct3D: running without a window (nothing is displayed)");
@@ -2001,16 +2022,13 @@ static void ui_point_from_window(float window_x, float window_y, short *x, short
 	ui_point_from_window_on(window_x, window_y, TRUE, x, y);
 }
 
-#ifdef HALO_ANDROID
 int halo_scoreboard_pointer_update(int offered, struct halo_ui_pointer *pointer)
 {
+#ifdef HALO_ANDROID
 	(void)offered;
 	(void)pointer;
 	return -1;
-}
 #else
-int halo_scoreboard_pointer_update(int offered, struct halo_ui_pointer *pointer)
-{
 	struct platform_ui_pointer state;
 
 	memset(pointer, 0, sizeof(*pointer));
@@ -2021,8 +2039,8 @@ int halo_scoreboard_pointer_update(int offered, struct halo_ui_pointer *pointer)
 	pointer->moved = state.moved != FALSE;
 	pointer->left_clicks = (unsigned char)(state.left_clicks < 255 ? state.left_clicks : 255);
 	return 1;
-}
 #endif
+}
 
 int halo_ui_pointer_update(int menus_active, struct halo_ui_pointer *pointer)
 {
@@ -2749,7 +2767,7 @@ static GLuint vertex_shader_get(struct vertex_shader_object *program, BOOL immed
 			immediate ? 0 : device.vertex_shader->packed_mask, lit ? &program->lighting : NULL);
 
 		program->shaders_tried |= tried;
-		*shader = xgpu_compile_shader(GL_VERTEX_SHADER, source, "vertex");
+		*shader = xgpu_shader_cache_compile(GL_VERTEX_SHADER, source, "vertex");
 		if (debug_settings.dump_shaders)
 		{
 			char path[512];
@@ -2801,7 +2819,7 @@ static GLuint fragment_shader_get(const struct nv2a_pixel_shader_key *key)
 	entry->hash = hash;
 	entry->key = *key;
 	source = nv2a_pixel_shader_to_glsl(key);
-	entry->shader = xgpu_compile_shader(GL_FRAGMENT_SHADER, source, "pixel");
+	entry->shader = xgpu_shader_cache_compile(GL_FRAGMENT_SHADER, source, "pixel");
 	if (debug_settings.dump_shaders)
 	{
 		char path[512];
@@ -2821,13 +2839,14 @@ static GLuint fragment_shader_get(const struct nv2a_pixel_shader_key *key)
 	return entry->shader;
 }
 
+static struct program_entry *program_entry_add(GLuint vertex_shader, GLuint fragment_shader, GLuint program);
+
 static struct program_entry *program_get(GLuint vertex_shader, GLuint fragment_shader)
 {
 	static struct program_entry *last;
 	unsigned long hash = (vertex_shader * 2654435761UL) ^ fragment_shader;
 	struct program_entry **bucket = &program_buckets[hash % PROGRAM_BUCKETS];
 	struct program_entry *entry;
-	int stage;
 
 	if (last && last->vertex_shader == vertex_shader && last->fragment_shader == fragment_shader)
 		return last;
@@ -2841,18 +2860,49 @@ static struct program_entry *program_get(GLuint vertex_shader, GLuint fragment_s
 			return entry;
 		}
 	}
-	entry = calloc(1, sizeof(*entry));
+	entry = program_entry_add(vertex_shader, fragment_shader,
+		vertex_shader && fragment_shader ? xgpu_link_program(vertex_shader, fragment_shader, "shader") : 0);
+	if (!entry || !entry->program)
+		return NULL;
+	xgpu_shader_cache_linked(vertex_shader, fragment_shader);
+	last = entry;
+	return entry;
+}
+
+/* a program made already, ready for program_get to find (the shader
+cache's warming at start-up) */
+static void program_adopt(GLuint vertex_shader, GLuint fragment_shader, GLuint program)
+{
+	unsigned long hash = (vertex_shader * 2654435761UL) ^ fragment_shader;
+	struct program_entry *entry;
+
+	for (entry = program_buckets[hash % PROGRAM_BUCKETS]; entry; entry = entry->next)
+	{
+		if (entry->vertex_shader == vertex_shader && entry->fragment_shader == fragment_shader)
+			return;
+	}
+	program_entry_add(vertex_shader, fragment_shader, program);
+}
+
+/* a pair's cache entry with its program (0: it did not link), the
+program's uniforms found */
+static struct program_entry *program_entry_add(GLuint vertex_shader, GLuint fragment_shader, GLuint program)
+{
+	unsigned long hash = (vertex_shader * 2654435761UL) ^ fragment_shader;
+	struct program_entry **bucket = &program_buckets[hash % PROGRAM_BUCKETS];
+	struct program_entry *entry = calloc(1, sizeof(*entry));
+	int stage;
+
+	if (!entry)
+		return NULL;
 	entry->vertex_shader = vertex_shader;
 	entry->fragment_shader = fragment_shader;
 	memset(&entry->uniforms, 0xff, sizeof(entry->uniforms));
 	entry->next = *bucket;
 	*bucket = entry;
-	if (!vertex_shader || !fragment_shader)
-		return NULL;
-
-	entry->program = xgpu_link_program(vertex_shader, fragment_shader, "shader");
+	entry->program = program;
 	if (!entry->program)
-		return NULL;
+		return entry;
 	state_program(entry->program);
 	entry->constants = glGetUniformLocation(entry->program, "c");
 	entry->constant_count = XGPU_VERTEX_CONSTANT_COUNT;
@@ -2907,7 +2957,6 @@ static struct program_entry *program_get(GLuint vertex_shader, GLuint fragment_s
 		snprintf(name, sizeof(name), "tex%d", stage);
 		glUniform1i(glGetUniformLocation(entry->program, name), stage);
 	}
-	last = entry;
 	return entry;
 }
 
@@ -5830,6 +5879,50 @@ static void visibility_copy_batch(void)
 }
 
 #endif
+/* the loading screen's picture (progress_bar.c, made by the CPU in
+port/linux/game/loading_screen.c): `rgba` bytes, its top row first, over the
+whole back buffer */
+void halo_draw_picture(const unsigned char *rgba, long width, long height)
+{
+	static GLuint texture;
+	static long texture_width, texture_height;
+	struct render_target_entry *back_buffer;
+
+	if (!device.gl_ready || !rgba || width <= 0 || height <= 0)
+		return;
+	back_buffer = render_target_get(&device.back_buffer);
+	if (!back_buffer)
+		return;
+	/* (what the back buffer's multisampled pixels hold first, so that the
+	display's resolve leaves the picture) */
+	render_target_resolve(&back_buffer->target);
+	if (!texture)
+		glGenTextures(1, &texture);
+	glBindTexture(GL_TEXTURE_2D, texture);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	if (texture_width != width || texture_height != height)
+	{
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, (GLsizei)width, (GLsizei)height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+		texture_width = width;
+		texture_height = height;
+	}
+	else
+	{
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, (GLsizei)width, (GLsizei)height, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+	}
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer_get(texture, 0));
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer_get(back_buffer->target.texture, 0));
+	glDisable(GL_SCISSOR_TEST);
+	glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+	/* (row 0 of the render target is the top of the picture, as of this
+	texture) */
+	glBlitFramebuffer(0, 0, (GLint)width, (GLint)height, 0, 0, (GLint)back_buffer->target.gl_width,
+		(GLint)back_buffer->target.gl_height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+	xgpu_gl_state_invalidate();
+	gl_check_errors("picture");
+}
+
 void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destination_rectangle,
 	void *unused, void *unused2)
 {
@@ -5839,6 +5932,9 @@ void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destinat
 	(void)destination_rectangle;
 	(void)unused;
 	(void)unused2;
+#ifdef HALO_ANDROID
+	host_touch_frame();
+#endif
 	if (screenshot_every < 0)
 		screenshot_every = config_integer("debug.screenshot_every");
 
@@ -5881,6 +5977,7 @@ void WINAPI D3DDevice_Present(CONST RECT *source_rectangle, CONST RECT *destinat
 		/* row 0 of the render target is the top of the picture */
 		glBlitFramebuffer(0, 0, (GLint)back_buffer->target.gl_width, (GLint)back_buffer->target.gl_height,
 			x, y + height, x + width, y, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+		ui_overlay_present(x, y, width, height, window_width, window_height);
 		platform_video_swap();
 		xgpu_gl_state_invalidate();
 		memory_watch_begin_frame();

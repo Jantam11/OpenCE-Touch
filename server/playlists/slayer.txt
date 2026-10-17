@@ -1,0 +1,6 @@
+# One map and game type per line. No maps are distributed here.
+bloodgulch slayer
+hangemhigh slayer
+sidewinder ctf
+# Enable only after installing a compatible CE map:
+# timberland@ce slayer

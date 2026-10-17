@@ -23,6 +23,9 @@ struct halo_ui_pointer
 	unsigned char right_clicks;
 	/* whole wheel notches, away from the user positive */
 	signed char wheel_steps;
+	short scroll_pixels;
+	unsigned char scroll_drag;
+	signed char side_step;
 	/* nonzero when the pointer is the touchscreen, not a mouse: a drag and a
 	wheel notch are the same steps, but the menus treat them differently */
 	unsigned char touch;

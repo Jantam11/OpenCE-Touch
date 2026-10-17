@@ -40,11 +40,9 @@ static BOOL screenshot_requested;
 /* likewise the mouse buttons pressed since the last read, so that a click
 quicker than a frame still counts */
 static unsigned char mouse_buttons_pressed[PLATFORM_MOUSE_BUTTON_COUNT];
-#ifndef HALO_ANDROID
 /* the menus' pointer (platform_ui_pointer_set_active), under input_lock */
 static struct platform_ui_pointer ui_pointer;
 static float ui_pointer_wheel;
-#endif
 static pthread_mutex_t input_lock = PTHREAD_MUTEX_INITIALIZER;
 /* rebinding (platform_binding_capture_begin), under input_lock: waiting for
 an input, and the one taken; then the keyboard and mouse settle (their keys
@@ -131,6 +129,11 @@ BOOL platform_sdl_initialize(void)
 	controller emulation in xinput_sdl.c) */
 	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
 #endif
+	if (platform_dedicated())
+	{
+		SDL_SetHint(SDL_HINT_AUDIO_DRIVER, "dummy");
+		SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "dummy");
+	}
 	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD | SDL_INIT_EVENTS))
 	{
 		platform_log("SDL_Init failed: %s", SDL_GetError());
@@ -1232,7 +1235,7 @@ void platform_show_message(const char *title, const char *message)
 {
 	platform_log("%s: %s", title, message);
 	/* (a run nobody watches: the log only) */
-	if (config_boolean("debug.hidden_window") || config_boolean("debug.null_renderer"))
+	if (platform_dedicated() || config_boolean("debug.hidden_window") || config_boolean("debug.null_renderer"))
 		return;
 	pthread_mutex_lock(&platform_message_lock);
 	snprintf(platform_message_title, sizeof(platform_message_title), "%s", title);
@@ -1441,6 +1444,17 @@ void platform_pump_events(void)
 	static BOOL looked_at_clipboard;
 	BOOL look_at_clipboard = !looked_at_clipboard;
 
+#ifndef HALO_ANDROID
+	/* The unattended director is desktop-only; these SDL APIs have no
+	guest ABI bridge and must not be referenced by Android. */
+	if (!platform_window && platform_dedicated())
+	{
+		SDL_PumpEvents();
+		if (SDL_PeepEvents(&event, 1, SDL_GETEVENT, SDL_EVENT_QUIT, SDL_EVENT_QUIT) > 0)
+			exit(EXIT_SUCCESS);
+		return;
+	}
+#endif
 	if (!platform_window || SDL_GetCurrentThreadID() != platform_event_thread)
 		return;
 	if (exit_ticks == (Uint64)-1)
@@ -1527,6 +1541,7 @@ void platform_pump_events(void)
 				scoreboard_pointer.moved = TRUE;
 				break;
 			}
+#endif
 			/* in the menus the mouse moves the pointer, not the view */
 			if (input_state.ui_pointer)
 			{
@@ -1535,7 +1550,6 @@ void platform_pump_events(void)
 				ui_pointer.moved = TRUE;
 				break;
 			}
-#endif
 			input_state.mouse_dx += event.motion.xrel;
 			input_state.mouse_dy += event.motion.yrel;
 			break;
@@ -1578,6 +1592,7 @@ void platform_pump_events(void)
 				}
 				break;
 			}
+#endif
 			/* clicks in the menus go to the pointer; a button held down
 			when the menu closes stays up until pressed again, so the click
 			that resumes the game does not also fire */
@@ -1595,7 +1610,6 @@ void platform_pump_events(void)
 				}
 				break;
 			}
-#endif
 			if (event.button.button < PLATFORM_MOUSE_BUTTON_COUNT)
 			{
 				input_state.mouse_buttons[event.button.button] = event.button.down;
@@ -1628,7 +1642,6 @@ void platform_pump_events(void)
 				}
 				break;
 			}
-#ifndef HALO_ANDROID
 			if (input_state.ui_pointer)
 			{
 				/* whole notches: smooth-scrolling wheels send fractions */
@@ -1645,7 +1658,6 @@ void platform_pump_events(void)
 				}
 				break;
 			}
-#endif
 			input_state.mouse_wheel += event.wheel.y;
 			break;
 		case SDL_EVENT_WINDOW_FOCUS_LOST:
@@ -1717,6 +1729,10 @@ void platform_pump_events(void)
 
 void platform_menus_set_active(BOOL active)
 {
+#ifdef HALO_ANDROID
+	/* Published to the Java overlay: return to taps when a menu opens. */
+	SDL_SetHint("OPEN_CE_TOUCH_MENUS", active ? "1" : "0");
+#endif
 	pthread_mutex_lock(&input_lock);
 	input_state.menus = active;
 	pthread_mutex_unlock(&input_lock);
@@ -1747,7 +1763,6 @@ int platform_binding_capture_poll(int *input)
 	return result;
 }
 
-#ifndef HALO_ANDROID
 /* ---------- the menus' pointer */
 
 /* While a menu is up the mouse is released, its pointer shows (centered when
@@ -1767,13 +1782,17 @@ void platform_ui_pointer_set_active(BOOL active)
 	memset(input_state.mouse_buttons, 0, sizeof(input_state.mouse_buttons));
 	memset(mouse_buttons_pressed, 0, sizeof(mouse_buttons_pressed));
 	pthread_mutex_unlock(&input_lock);
+#ifndef HALO_ANDROID
 	platform_mouse_capture(!active && !input_state.mouse_released);
+#endif
 	if (active)
 	{
 		int width, height;
 
-		SDL_GetWindowSize(platform_window, &width, &height);
+		platform_video_window_size(&width, &height);
+#ifndef HALO_ANDROID
 		SDL_WarpMouseInWindow(platform_window, width * 0.5f, height * 0.5f);
+#endif
 		pthread_mutex_lock(&input_lock);
 		ui_pointer.x = width * 0.5f;
 		ui_pointer.y = height * 0.5f;
@@ -1789,6 +1808,9 @@ BOOL platform_ui_pointer_read(struct platform_ui_pointer *pointer)
 	pthread_mutex_lock(&input_lock);
 	active = input_state.ui_pointer;
 	*pointer = ui_pointer;
+#ifdef HALO_ANDROID
+	pointer->touch = TRUE;
+#endif
 	ui_pointer.moved = FALSE;
 	ui_pointer.left_clicks = 0;
 	ui_pointer.right_clicks = 0;
@@ -1799,9 +1821,14 @@ BOOL platform_ui_pointer_read(struct platform_ui_pointer *pointer)
 
 void platform_video_window_size(int *width, int *height)
 {
+#ifdef HALO_ANDROID
+	SDL_GetWindowSizeInPixels(platform_window, width, height);
+#else
 	SDL_GetWindowSize(platform_window, width, height);
+#endif
 }
 
+#ifndef HALO_ANDROID
 /* ---------- the system's on-screen keyboard */
 
 /* A menu's text field is typed into (platform_text_field, xinput_sdl.c).
@@ -1878,41 +1905,6 @@ static void screen_keyboard_update(void)
 		SDL_DestroyProperties(properties);
 	}
 }
-
-#else
-/* ---------- the menus' pointer (the touchscreen)
-
-While a menu is up, taps and drags go to the menus (touch_input.c,
-halo_ui_pointer_update in d3d8_gl.c). */
-void platform_ui_pointer_set_active(BOOL active)
-{
-	pthread_mutex_lock(&input_lock);
-	if ((active != FALSE) != (input_state.ui_pointer != FALSE))
-	{
-		input_state.ui_pointer = active;
-		touch_input_menu_set_active(active != FALSE);
-	}
-	pthread_mutex_unlock(&input_lock);
-}
-
-BOOL platform_ui_pointer_read(struct platform_ui_pointer *pointer)
-{
-	BOOL active;
-
-	pthread_mutex_lock(&input_lock);
-	active = input_state.ui_pointer;
-	touch_input_menu_read(pointer);
-	pthread_mutex_unlock(&input_lock);
-	return active;
-}
-
-/* the window is its pixels on Android (no display scaling): touch_input.c
-scales the fingers' 0..1 by the drawable's size */
-void platform_video_window_size(int *width, int *height)
-{
-	platform_video_drawable_size(width, height);
-}
-
 #endif
 void platform_input_read(struct platform_input_state *state, BOOL consume_motion)
 {

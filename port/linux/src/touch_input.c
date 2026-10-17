@@ -192,7 +192,7 @@ void touch_input_gamepad(XINPUT_GAMEPAD *pad)
 	}
 }
 
-#if defined(HALO_ANDROID) || defined(HALO_WEB)
+#if defined(HALO_ANDROID) && !defined(HALO_TOUCH_SDL_GAMEPAD)
 /* ---------- the on-screen touch controls
 
 The overlay (port/android/app/.../TouchControls.java) draws and reads its

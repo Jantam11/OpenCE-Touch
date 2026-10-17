@@ -1,0 +1,6 @@
+**
+!dist/
+!dist/halo-linux-release/
+!dist/halo-linux-release/**
+!server/
+!server/**

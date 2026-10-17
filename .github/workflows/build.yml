@@ -26,8 +26,12 @@ on:
       - "**.md"
   workflow_dispatch:
     inputs:
+      publish_touch:
+        description: Publish the touch release after all build checks pass
+        type: boolean
+        default: false
       profile:
-        description: "Also build the profiling flavour (configure.py --profile) on Linux"
+        description: Also build the Linux profiling flavour
         type: boolean
         default: false
 
@@ -46,6 +50,7 @@ env:
 
 jobs:
   linux:
+    if: github.ref != 'refs/heads/touch-controls'
     # Arch Linux has what the build needs as packages: clang 22 (for the
     # profile-guided optimisation in pgo/), and CMake, pkg-config and
     # wayland-scanner for the SDL 3 that the portable build brings. The build
@@ -93,6 +98,11 @@ jobs:
         run: |
           python -m pytest -q tools/test_linux_port.py tools/test_android_asm_convert.py tools/test_host_watch_hash.py tools/test_touch_menu.py tools/harness tools/test_profile.py
           python tools/test_light_storage.py
+          python tools/test_sound_lifecycle.py
+          python tools/test_sound_transition.py
+          python tools/test_virtual_keyboard_input.py
+          python tools/test_dedicated_server.py
+          python tools/test_map_browser.py
 
       - name: Compile cache
         run: ccache --show-stats
@@ -125,6 +135,18 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      - name: Touch input regression checks
+        run: |
+          python3 tools/test_android_release_features.py
+          python3 tools/test_android_touch.py
+          python3 tools/test_android_mobile.py
+          python3 tools/test_android_render_quit.py
+          python3 tools/test_camera_touch.py
+          python3 tools/test_android_touch_merge.py
+          python3 tools/test_virtual_keyboard_input.py
+          python3 -m pip install pytest
+          python3 -m pytest -q tools/test_touch_menu.py tools/test_linux_port.py -k "menus_are_well_formed or touch_menu or config_has_each_section_once"
+
       - uses: actions/cache@v4
         with:
           path: .ccache
@@ -135,7 +157,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: build/android/third_party
-          key: android-third-party-${{ hashFiles('tools/android_build.py', 'port/android/patches/**') }}
+          key: android-third-party-${{ hashFiles('tools/android_build.py', 'tools/build_android_bink.py', 'port/android/patches/**') }}
 
       - uses: actions/cache@v4
         with:
@@ -190,6 +212,7 @@ jobs:
           retention-days: 3
 
   windows:
+    if: github.ref != 'refs/heads/touch-controls'
     # The runner image has LLVM, Python and Visual Studio's x86 libraries and
     # Windows SDK.
     runs-on: windows-2025
@@ -261,6 +284,7 @@ jobs:
           retention-days: 3
 
   web:
+    if: github.ref != 'refs/heads/touch-controls'
     # Emscripten (emsdk, the version below, cached) builds the web port's
     # site (port/web/README.md); the tests check its graph, the page's
     # importer and service worker, its sockets, that it starts in a
@@ -343,7 +367,7 @@ jobs:
     # (every file keeps its name from release to release, for the README's
     # latest/download links); then all but the newest five build-* releases
     # go, tags and all. Only for main, and only when every platform built.
-    needs: [linux, android, windows, web]
+    needs: [android]
     if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -422,47 +446,24 @@ jobs:
             gh release delete "$tag" --cleanup-tag --yes
           done
 
-  pages:
-    # The release's web build to GitHub Pages, which serves it at
-    # https://halocombatevolved.com/ (port/web/README.md, "Hosting"). Only
-    # main, only once every platform built and the release is out (the site
-    # and the release are one build), and a deployment is never cancelled
-    # halfway. The repository's Pages source must be GitHub Actions.
-    needs: [release]
-    if: ${{ github.ref == 'refs/heads/main' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
+  touch_release:
+    needs: [android]
+    if: ${{ github.ref == 'refs/heads/touch-controls' && (inputs.publish_touch == true || startsWith(github.event.head_commit.message, 'Release OpenCE-Touch ')) }}
     permissions:
-      pages: write
-      id-token: write
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: halo-web-release
-          path: site
-
-      - uses: actions/configure-pages@v5
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
-      - id: deploy
-        uses: actions/deploy-pages@v4
+      contents: write
+      actions: read
+    uses: ./.github/workflows/touch-release.yml
+    with:
+      build_run: ${{ format('{0}', github.run_id) }}
+      tag: v0.6.0-touch
 
   notify:
     # A Discord embed for the run, to the DISCORD_WEBHOOK secret (nothing
     # without it): green when every platform built, red when one did not,
     # with each platform's result, this run's release (main only), and links
-    # to the latest release's builds and the site.
-    needs: [linux, android, windows, web, release, pages]
-    if: ${{ !cancelled() }}
+    # to the latest release's builds.
+    needs: [linux, android, windows, release]
+    if: ${{ !cancelled() && github.ref != 'refs/heads/touch-controls' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

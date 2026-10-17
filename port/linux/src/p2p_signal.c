@@ -21,9 +21,12 @@ PUBLISH_INTERVAL). Answers to proven joiners come first, then the listing
 answers to requests not proven yet only while some are left over (the
 joiner asks again).
 
-Everything that passes through them is sealed with a key derived from the
-invite's token, and goes to topics that are hashes of it, so the brokers
-(and anyone watching them) learn nothing and can join nothing:
+Signalling is sealed with a key derived from the invite's token and uses
+hashed topics. Relay packets instead retain the tunnel's session encryption
+and authentication, on hceu/r/<HMAC(directional session key, "tunnel-relay")>
+topics (16 hash bytes). Brokers observe connection and traffic metadata but
+cannot read game packets or impersonate a peer. No packets are retained.
+The signalling exchange is:
 
 - the host listens on hceu/3/<HMAC(token, "host" | host)>, where a joiner
   sends JOIN: its public key (its identifier is the key's hash), a nonce,
@@ -112,8 +115,6 @@ enum
 	MAXIMUM_LISTING_SIZE = 320,
 	/* the publishes awaiting acknowledgement on a broker */
 	MAXIMUM_IN_FLIGHT = 4,
-	/* the topics a broker is subscribed to (_topic_*) */
-	NUMBER_OF_TOPICS = 5,
 	/* a broker's publishes: at most PUBLISH_BURST at once, one more each
 	PUBLISH_INTERVAL milliseconds (EMQX drops a connection's publishes past
 	about 10 a second, without a word) */
@@ -126,6 +127,8 @@ enum
 	Interval): a dead host's goes even from a broker that kept it through a
 	restart */
 	LISTING_EXPIRY = 90,
+	OUTPUT_BUFFER_SIZE = 65536,
+
 
 	/* milliseconds */
 	CONNECT_TIMEOUT = 10000,
@@ -174,10 +177,14 @@ enum
 {
 	_topic_host,
 	_topic_join,
-	/* the server browser's (p2p_lobby.c): the own slot, queries, all slots */
+	/* the server browser's (p2p_lobby.c): the own slot, queries, all slots,
+	and each probe's answers (p2p_signal_probe) */
 	_topic_own_slot,
 	_topic_query,
 	_topic_slots,
+	_topic_probe,
+	/* the topics a broker is subscribed to */
+	NUMBER_OF_TOPICS = _topic_probe + P2P_MAXIMUM_PROBES,
 };
 
 /* MQTT 5's properties */
@@ -249,7 +256,8 @@ struct broker
 	} in_flight[MAXIMUM_IN_FLIGHT];
 	unsigned char input[BUFFER_SIZE];
 	int input_size;
-	unsigned char output[BUFFER_SIZE];
+	unsigned char relay_subscribed[P2P_MAXIMUM_PEERS];
+	unsigned char output[OUTPUT_BUFFER_SIZE];
 	int output_size;
 };
 
@@ -307,6 +315,16 @@ struct budget
 	unsigned long time;
 };
 
+/* a public game's host asked only to time the tunnel to it
+(p2p_signal_probe): a request of its listing's token, whose answers come
+sealed with its key to its topic */
+struct probe
+{
+	struct join join;
+	unsigned char key[P2P_SHA256_SIZE];
+	char topic[TOPIC_SIZE];
+};
+
 struct used_request
 {
 	/* the joiner's identifier and nonce */
@@ -314,8 +332,16 @@ struct used_request
 	unsigned long time;
 };
 
+struct relay_session
+{
+	int used;
+	unsigned char identifier[P2P_IDENTIFIER_SIZE];
+	char send_topic[TOPIC_SIZE], receive_topic[TOPIC_SIZE];
+	int preferred_broker;
+};
 static struct
 {
+	struct relay_session relays[P2P_MAXIMUM_PEERS];
 	int started;
 	struct broker brokers[MAXIMUM_BROKERS];
 	int broker_count;
@@ -362,6 +388,9 @@ static struct
 	unsigned char join_token[P2P_TOKEN_SIZE];
 	unsigned char join_key[P2P_SHA256_SIZE];
 	char join_topic[TOPIC_SIZE];
+
+	/* the server browser's probes (p2p_signal_probe) */
+	struct probe probes[P2P_MAXIMUM_PROBES];
 } signalling;
 
 static int elapsed(unsigned long since, unsigned long time)
@@ -448,6 +477,8 @@ static void broker_close(struct broker *broker, int failed)
 	broker->lobby_version = 0;
 	broker->lobby_clear_pending = 0;
 	broker->query_pending = 0;
+	memset(broker->relay_subscribed, 0, sizeof(broker->relay_subscribed));
+
 	if (failed)
 		broker->failures++;
 }
@@ -458,11 +489,11 @@ static void broker_flush(struct broker *broker)
 	{
 		int sent = posix_socket_send(broker->socket, broker->output, broker->output_size, 0);
 
-		if (sent < 0)
+		if (sent <= 0)
 		{
 			int error = posix_socket_last_error();
 
-			if (error != WSAEWOULDBLOCK && error != WSAEINPROGRESS)
+			if (!sent || (error != WSAEWOULDBLOCK && error != WSAEINPROGRESS))
 				broker_close(broker, 1);
 			return;
 		}
@@ -515,7 +546,8 @@ static void broker_send(struct broker *broker, unsigned char type, const unsigne
 		return;
 	header[0] = type;
 	header_size = 1 + put_variable(header + 1, size);
-	if (broker->output_size + header_size + size > BUFFER_SIZE)
+	if (broker->output_size + header_size + size > OUTPUT_BUFFER_SIZE)
+
 	{
 		broker_close(broker, 1);
 		return;
@@ -586,11 +618,12 @@ static void broker_topic(struct broker *broker, const char *topic, int subscribe
 /* a publish at most once, not retained: signalling's, and queries */
 static void broker_publish(struct broker *broker, const char *topic, const unsigned char *payload, int payload_size)
 {
-	unsigned char body[3 + TOPIC_SIZE + MAXIMUM_MESSAGE_SIZE + P2P_SEAL_OVERHEAD];
-	int size = put_string(body, topic);
+	unsigned char body[3 + TOPIC_SIZE + P2P_RELAY_PACKET_SIZE];
+	int size;
+	if (payload_size < 0 || payload_size > P2P_RELAY_PACKET_SIZE) return;
+	size = put_string(body, topic);
+	if (broker->protocol == 5) body[size++] = 0;
 
-	if (broker->protocol == 5)
-		body[size++] = 0;
 	memcpy(body + size, payload, (size_t)payload_size);
 	broker_send(broker, 0x30, body, size + payload_size);
 }
@@ -683,6 +716,8 @@ static void broker_sync_topics(struct broker *broker)
 	wanted[_topic_own_slot] = lobby && signalling.lobby_listed ? signalling.own_slot : "";
 	wanted[_topic_query] = lobby && signalling.lobby_listed ? P2P_LOBBY_QUERY_TOPIC : "";
 	wanted[_topic_slots] = lobby && signalling.lobby_browsing ? P2P_LOBBY_SLOT_PREFIX "+" : "";
+	for (index = 0; index < P2P_MAXIMUM_PROBES; index++)
+		wanted[_topic_probe + index] = signalling.probes[index].join.active ? signalling.probes[index].topic : "";
 	for (index = 0; index < NUMBER_OF_TOPICS; index++)
 	{
 		char *had = broker->topics[index];
@@ -699,6 +734,12 @@ static void broker_sync_topics(struct broker *broker)
 			broker->query_pending = 1;
 		strcpy(had, wanted[index]);
 	}
+	for (index = 0; index < P2P_MAXIMUM_PEERS && broker->state == _broker_ready; index++)
+		if (signalling.relays[index].used && !broker->relay_subscribed[index])
+		{
+			broker_topic(broker, signalling.relays[index].receive_topic, 1, 0);
+			if (broker->state == _broker_ready) broker->relay_subscribed[index] = 1;
+		}
 }
 
 static void publish_everywhere(const char *topic, const unsigned char *payload, int size)
@@ -1066,8 +1107,22 @@ static int host_nonce_current(const unsigned char *public_key, const unsigned ch
 
 /* ---------- the messages */
 
+/* the probe a request is, or NULL (one of the joins) */
+static struct probe *join_probe(struct join *join)
+{
+	int index;
+
+	for (index = 0; index < P2P_MAXIMUM_PROBES; index++)
+	{
+		if (join == &signalling.probes[index].join)
+			return &signalling.probes[index];
+	}
+	return NULL;
+}
+
 static void send_join(struct join *join)
 {
+	struct probe const *probe = join_probe(join);
 	unsigned char message[MAXIMUM_MESSAGE_SIZE];
 	unsigned char sealed[MAXIMUM_MESSAGE_SIZE + P2P_SEAL_OVERHEAD];
 	int size = 0;
@@ -1088,7 +1143,7 @@ static void send_join(struct join *join)
 		message_tag(join->base, "join", message, size, message + size);
 		size += TAG_SIZE;
 	}
-	size = p2p_seal(signalling.join_key, message, size, sealed);
+	size = p2p_seal(probe ? probe->key : signalling.join_key, message, size, sealed);
 	publish_everywhere(join->host_topic, sealed, size);
 	join->sent_time = p2p_now();
 }
@@ -1106,14 +1161,14 @@ static int joins_active(void)
 	return 0;
 }
 
-/* starts a request to the machine whose key has this hash, with a new
-nonce (the host makes one session of a request) */
-static void join_start(struct join *join, const unsigned char *host_hash)
+/* starts a request to the machine whose key has this hash, holding this
+token, with a new nonce (the host makes one session of a request) */
+static void join_start(struct join *join, const unsigned char *host_hash, const unsigned char *token)
 {
 	memset(join, 0, sizeof(*join));
 	memcpy(join->host_hash, host_hash, P2P_KEY_HASH_SIZE);
 	p2p_identifier_from_hash(host_hash, join->host);
-	make_topic(signalling.join_token, "host", join->host, join->host_topic);
+	make_topic(token, "host", join->host, join->host_topic);
 	posix_random_bytes(join->nonce, NONCE_SIZE);
 	join->nonce_time = p2p_now();
 	join->active = 1;
@@ -1373,10 +1428,13 @@ static void accept_received(const unsigned char *message, int size)
 	if (size < fixed + 1 + TAG_SIZE)
 		return;
 	/* (the request it answers: by its nonce) */
-	for (index = 0; index < MAXIMUM_JOINS && !join; index++)
+	for (index = 0; index < MAXIMUM_JOINS + P2P_MAXIMUM_PROBES && !join; index++)
 	{
-		if (signalling.joins[index].active && !memcmp(nonce, signalling.joins[index].nonce, NONCE_SIZE))
-			join = &signalling.joins[index];
+		struct join *asked = index < MAXIMUM_JOINS ? &signalling.joins[index] :
+			&signalling.probes[index - MAXIMUM_JOINS].join;
+
+		if (asked->active && !memcmp(nonce, asked->nonce, NONCE_SIZE))
+			join = asked;
 	}
 	if (!join)
 		return;
@@ -1409,7 +1467,8 @@ static void accept_received(const unsigned char *message, int size)
 	}
 	session_secret(join->base, nonce, host_nonce, secret);
 	if (!p2p_peer_offered(join->host, host_public, secret, candidates, count, &webrtc,
-		join == &signalling.joins[0] ? _p2p_offered_host : _p2p_offered_player) || join->answered)
+		join_probe(join) ? _p2p_offered_probe : join == &signalling.joins[0] ? _p2p_offered_host :
+		_p2p_offered_player) || join->answered)
 	{
 		return;
 	}
@@ -1425,6 +1484,18 @@ static void publish_received(struct broker *broker, const char *topic, const uns
 	unsigned char message[MAXIMUM_MESSAGE_SIZE];
 	int message_size;
 
+	int relay_index;
+	for (relay_index = 0; relay_index < P2P_MAXIMUM_PEERS; relay_index++)
+	{
+		struct relay_session *relay = &signalling.relays[relay_index];
+		if (relay->used && !strcmp(topic, relay->receive_topic))
+		{
+			if (size > 0 && size <= P2P_RELAY_PACKET_SIZE &&
+							p2p_relay_received(relay->identifier, payload, size))
+				relay->preferred_broker = (int)(broker - signalling.brokers);
+			return;
+		}
+	}
 	if (size > MAXIMUM_MESSAGE_SIZE + P2P_SEAL_OVERHEAD)
 		return;
 	if (!strncmp(topic, P2P_LOBBY_SLOT_PREFIX, sizeof(P2P_LOBBY_SLOT_PREFIX) - 1))
@@ -1448,6 +1519,22 @@ static void publish_received(struct broker *broker, const char *topic, const uns
 		message_size = p2p_open(signalling.join_key, payload, size, message);
 		if (message_size >= 2 && message[0] == _message_accept && message[1] == MESSAGE_VERSION)
 			accept_received(message, message_size);
+	}
+	else
+	{
+		int index;
+
+		for (index = 0; index < P2P_MAXIMUM_PROBES; index++)
+		{
+			struct probe const *probe = &signalling.probes[index];
+
+			if (!probe->join.active || strcmp(topic, probe->topic))
+				continue;
+			message_size = p2p_open(probe->key, payload, size, message);
+			if (message_size >= 2 && message[0] == _message_accept && message[1] == MESSAGE_VERSION)
+				accept_received(message, message_size);
+			break;
+		}
 	}
 }
 
@@ -1889,9 +1976,10 @@ void p2p_signal_update(const int *read, int read_count, const int *write, int wr
 		}
 		broker_update_lobby(broker);
 	}
-	for (index = 0; index < MAXIMUM_JOINS; index++)
+	for (index = 0; index < MAXIMUM_JOINS + P2P_MAXIMUM_PROBES; index++)
 	{
-		struct join *join = &signalling.joins[index];
+		struct join *join = index < MAXIMUM_JOINS ? &signalling.joins[index] :
+			&signalling.probes[index - MAXIMUM_JOINS].join;
 
 		if (!join->active)
 			continue;
@@ -1979,7 +2067,7 @@ void p2p_signal_join(const unsigned char *host_hash, const unsigned char *token)
 	/* (new each time: the host makes one session of a request; a browser's
 	connection for the last goes, unless a session took it up) */
 	p2p_webrtc_new_request();
-	join_start(&signalling.joins[0], host_hash);
+	join_start(&signalling.joins[0], host_hash, token);
 }
 
 void p2p_signal_stop_joining(void)
@@ -2015,7 +2103,7 @@ int p2p_signal_join_player(const unsigned char *player_hash, const unsigned char
 		for (index = 1; index < MAXIMUM_JOINS; index++)
 			signalling.joins[index].active = 0;
 	}
-	join_start(free_join, player_hash);
+	join_start(free_join, player_hash, token);
 	return 1;
 }
 
@@ -2028,6 +2116,40 @@ void p2p_signal_stop_joining_player(const unsigned char *identifier)
 		if (signalling.joins[index].active && !memcmp(signalling.joins[index].host, identifier, P2P_IDENTIFIER_SIZE))
 		{
 			signalling.joins[index].active = 0;
+			sync_all_topics();
+		}
+	}
+}
+
+int p2p_signal_probe(const unsigned char *host_hash, const unsigned char *token)
+{
+	int index;
+
+	for (index = 0; index < P2P_MAXIMUM_PROBES; index++)
+	{
+		struct probe *probe = &signalling.probes[index];
+
+		if (probe->join.active)
+			continue;
+		derive(token, "seal", NULL, probe->key);
+		make_topic(token, "joiner", p2p_identifier(), probe->topic);
+		join_start(&probe->join, host_hash, token);
+		return 1;
+	}
+	return 0;
+}
+
+void p2p_signal_stop_probe(const unsigned char *identifier)
+{
+	int index;
+
+	for (index = 0; index < P2P_MAXIMUM_PROBES; index++)
+	{
+		struct join *join = &signalling.probes[index].join;
+
+		if (join->active && !memcmp(join->host, identifier, P2P_IDENTIFIER_SIZE))
+		{
+			join->active = 0;
 			sync_all_topics();
 		}
 	}
@@ -2092,4 +2214,74 @@ void p2p_signal_lobby_quit(void)
 		broker_send(broker, 0xE0, disconnect, broker->protocol == 5 ? 2 : 0);
 		broker_flush(broker);
 	}
+}
+
+/* Topic names are session-specific and directional; only ciphertext is published,
+			with QoS 0 and no retention. Congestion drops packets rather than growing memory. */
+static void relay_topic(const unsigned char *key, char *topic)
+{
+	unsigned char hash[P2P_SHA256_SIZE];
+	p2p_hmac_sha256(key, P2P_SHA256_SIZE, "tunnel-relay", 12, hash);
+	strcpy(topic, "hceu/r/");
+	p2p_hex(hash, 16, topic + 7);
+}
+void p2p_signal_relay_add(const unsigned char *identifier, const unsigned char *send_key,
+	const unsigned char *receive_key)
+{
+	int i, b;
+	if (!config_boolean("network.relay_fallback")) return;
+	for (i = 0; i < P2P_MAXIMUM_PEERS; i++)
+		if (!signalling.relays[i].used)
+		{
+			struct relay_session *relay = &signalling.relays[i];
+			relay->used = 1;
+			memcpy(relay->identifier, identifier, P2P_IDENTIFIER_SIZE);
+			relay_topic(send_key, relay->send_topic);
+			relay_topic(receive_key, relay->receive_topic);
+			relay->preferred_broker = -1;
+			for (b = 0; b < signalling.broker_count; b++) broker_sync_topics(&signalling.brokers[b]);
+			return;
+		}
+}
+void p2p_signal_relay_remove(const unsigned char *identifier)
+{
+	int i, b;
+	for (i = 0; i < P2P_MAXIMUM_PEERS; i++)
+		if (signalling.relays[i].used && !memcmp(signalling.relays[i].identifier, identifier, P2P_IDENTIFIER_SIZE))
+		{
+			for (b = 0; b < signalling.broker_count; b++)
+			{
+				struct broker *broker = &signalling.brokers[b];
+				if (broker->state == _broker_ready && broker->relay_subscribed[i])
+					broker_topic(broker, signalling.relays[i].receive_topic, 0, 0);
+				broker->relay_subscribed[i] = 0;
+			}
+			memset(&signalling.relays[i], 0, sizeof(signalling.relays[i]));
+			return;
+		}
+}
+int p2p_signal_relay_send(const unsigned char *identifier, const unsigned char *packet, int size)
+{
+	int i, b, sent = 0;
+	if (size < 1 || size > P2P_RELAY_PACKET_SIZE) return 0;
+	for (i = 0; i < P2P_MAXIMUM_PEERS; i++)
+		if (signalling.relays[i].used && !memcmp(signalling.relays[i].identifier, identifier, P2P_IDENTIFIER_SIZE))
+		{
+			struct relay_session *relay = &signalling.relays[i];
+			if (relay->preferred_broker >= 0 && signalling.brokers[relay->preferred_broker].state != _broker_ready)
+				relay->preferred_broker = -1;
+			for (b = 0; b < signalling.broker_count; b++)
+			{
+				struct broker *broker = &signalling.brokers[b];
+				if (broker->state != _broker_ready || (size != P2P_RELAY_PROBE_SIZE && relay->preferred_broker >= 0 && relay->preferred_broker != b)) continue;
+				/* Reserve control-message space; flush first, then drop if still congested. */
+				broker_flush(broker);
+				if (broker->state != _broker_ready || broker->output_size + size + TOPIC_SIZE + 6 > OUTPUT_BUFFER_SIZE - 1024) continue;
+				broker_publish(broker, relay->send_topic, packet, size);
+				sent = 1;
+			}
+			return sent;
+		}
+	return 0;
+
 }

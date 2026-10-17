@@ -1391,6 +1391,9 @@ void hud_messaging_update(
 		boolean state_active;
 		short message_index;
 
+#ifdef HALO_ANDROID
+		hud_android_panel_offsets_enable(FALSE);
+#endif
 		hud_calculate_point(
 			local_player_index,
 			&hud_msg_def->absolute_placement,
@@ -1399,6 +1402,9 @@ void hud_messaging_update(
 			local_player_count() > 1,
 			0.0f,
 			&screen_point);
+#ifdef HALO_ANDROID
+		hud_android_panel_offsets_enable(TRUE);
+#endif
 		line_top = screen_point.y;
 		font = font_definition_get(font_index);
 		if (split_screen)

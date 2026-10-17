@@ -203,7 +203,8 @@ MENU_INTEGER_ATTRIBUTES = {"auto_close", "auto_close_fade", "height", "index", "
                            "text_y", "top", "width", "x", "y"}
 
 
-def test_menus_are_well_formed():
+@pytest.mark.parametrize("theme", ("default", "glassed", "vanilla", "cairo"))
+def test_menus_are_well_formed(theme):
     """What port/linux/src/menu_files.c and port/linux/game/menu_tags.c check
     when the game loads them, but the map's own names (paths with backslashes),
     which only the map has."""
@@ -218,10 +219,19 @@ def test_menus_are_well_formed():
     functions |= set(c_strings(tags, "port_function_names[] =", "};"))
     inputs = set(c_strings(tags, "game_data_input_names[] =", "};"))
     inputs |= set(c_strings(tags, "port_game_data_input_names[] =", "};"))
-    listed = json.loads((MENUS / "menus.json").read_text())["files"]
-    files = sorted(MENUS.rglob("*.xml"))
-    assert sorted(path.relative_to(MENUS).as_posix() for path in files) == \
-        sorted(name for name in listed if name.endswith(".xml"))
+    from tools.embed_assets import menu_files
+    listed = menu_files()
+    assert len(listed) == len(set(listed))
+    assert {path.relative_to(MENUS).as_posix() for path in MENUS.rglob("*.xml")} == \
+        {name for name in listed if name.endswith(".xml")}
+    files = []
+    for name in listed:
+        if not name.endswith(".xml") or name.startswith("skin/"):
+            continue
+        if theme in ("default", "vanilla") and name.startswith("shell/"):
+            continue
+        layered = MENUS / "skin" / theme / name
+        files.append(layered if layered.is_file() else MENUS / name)
     widgets, bitmaps, strings, references, roots = {}, {}, {}, [], []
     for path in files:
         tree = ElementTree.parse(path)
@@ -251,8 +261,11 @@ def test_menus_are_well_formed():
                     if frame.get("map"):
                         assert "\\" in frame.get("map") and int(frame.get("index")) >= 0, where
                         continue
-                    assert frame.get("png") in listed, where
-                    with (MENUS / frame.get("png")).open("rb") as png:
+                    assert frame.get("png") in listed or f"skin/{theme}/{frame.get("png")}" in listed, where
+                    art = MENUS / "skin" / theme / frame.get("png")
+                    if not art.is_file():
+                        art = MENUS / frame.get("png")
+                    with art.open("rb") as png:
                         header = png.read(24)
                     width, height = int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big")
                     logical = int(frame.get("width")), int(frame.get("height"))
@@ -421,6 +434,23 @@ def test_config_has_each_section_once(tmp_path):
     run("write", "display.first_person_legs", "true")
     assert run("get", "display.first_person_legs")[0] == "true"
 
+    # Fork settings in different sections survive both ON/OFF choices and
+    # later writes. Each read is a new process, as after closing the app.
+    choices = {"display.high_res_hud": "false", "display.high_res_text": "false",
+               "display.shield_glow": "true", "input.touch_aim_assist": "false",
+               "audio.resampling": "linear", "display.theme": "cairo",
+               "display.powerup_timers": "true", "display.loading_screen_min_seconds": "3",
+               "display.far_clip_distance": "4096", "display.texture_decode": "cpu",
+               "network.public_lobby": "false", "network.host_public": "false"}
+    for name, value in choices.items():
+        run("write", name, value)
+    for name, value in choices.items():
+        assert run("get", name)[0] == value, name
+    run("write", "display.high_res_hud", "true")
+    assert run("get", "display.high_res_hud")[0] == "true"
+    assert run("get", "display.high_res_text")[0] == "false"
+    assert len(sections()) == len(set(sections())), sections()
+
     # an older version's
     config.write_text("[display]\nvsync = false\n\n[game]\nconsole_log = \"all\"\n\n"
                       "[display]\nfirst_person_legs = true\n")
@@ -558,3 +588,21 @@ def test_custom_edition_loader_and_validator_survive_damaged_maps():
     result = subprocess.run([str(MAP_VALIDATE), "--fuzz", "100", "--seed", "1", *map(str, chosen)],
                             capture_output=True, text=True, timeout=3600)
     assert result.returncode == 0, (result.stdout + result.stderr)[-6000:]
+
+
+def test_overlay_and_shader_cache_gl_calls_use_runtime_loader():
+    """New renderer units must use the native loader, including Android's bridge.
+    A declared system GL prototype alone compiles but fails at native link time.
+    """
+    from tools.android_gl_stubs import android_functions
+    root = MENUS.parent.parent.parent
+    header = root / "port/linux/src/gl.h"
+    text = header.read_text()
+    android = set(android_functions(str(header)))
+    desktop = set(re.findall(r"X\((gl\w+)\)", text.split("/* ANDROID_GL_FUNCTIONS_END */")[1]))
+    aliases = set(re.findall(r"#define (gl\w+) halo_gl\w+", text))
+    for name in ("ui_overlay.c", "xgpu_shader_cache.c"):
+        calls = set(re.findall(r"\b(gl[A-Z]\w*)\(", (header.parent / name).read_text()))
+        assert calls <= desktop & aliases
+        # Desktop clip control is explicitly guarded out on ES.
+        assert calls - {"glClipControl"} <= android & aliases

@@ -25,12 +25,17 @@ int p2p_hand_off_invite(void);
 /* joins the game an invite link or code leads to; text may hold other
 words around it. Returns nonzero if it held an invite */
 int p2p_join_invite(const char *text);
+/* 0 idle; 1 broker, 2 host, 3 transport, 4 relay, 5 UDP; negative: off, timeout, invalid, own link. */
+int p2p_join_status(void);
 
 /* this machine's identifier, which its XNADDR carries (6 bytes) */
 const unsigned char *p2p_identifier(void);
 /* the address the game reaches the machine with this identifier at, if it
 is an internet play peer (reached yet or not) */
 int p2p_peer_address(const unsigned char *identifier, unsigned long *address);
+/* the ping to the machine with this identifier, in milliseconds, if the
+tunnel reaches it; -1 if not, or not timed yet */
+int p2p_peer_ping(const unsigned char *identifier);
 
 /* a destination the game sends to or connects to (stream: a TCP socket;
 socket: the game's UDP socket connected to it, else -1): 1 if it is a peer's

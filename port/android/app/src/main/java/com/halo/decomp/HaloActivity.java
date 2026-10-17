@@ -1,25 +1,15 @@
 package com.halo.decomp;
 
-import android.app.AlertDialog;
 import android.content.Context;
-import android.content.Intent;
 import android.graphics.Insets;
-import android.net.Uri;
-import android.net.wifi.WifiManager;
 import android.os.Build;
+import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.view.Display;
-import android.view.View;
-import android.view.ViewGroup;
-import android.view.WindowInsets;
 import android.view.WindowManager;
-import android.widget.Toast;
-
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 
 import org.libsdl.app.SDLActivity;
 
@@ -30,16 +20,9 @@ import org.libsdl.app.SDLActivity;
 public class HaloActivity extends SDLActivity {
     /** lets system link's broadcasts in over Wi-Fi while the game runs */
     private WifiManager.MulticastLock multicastLock;
-    /**
-     * the latest system gesture insets {left, top, right, bottom}, in pixels;
-     * written on the UI thread, read by the game's thread: replaced as a
-     * whole, never changed in place
-     */
-    private volatile int[] gestureInsets = new int[] { 0, 0, 0, 0 };
-    /** the on-screen touch controls, over SDL's surface */
     private TouchControls touchControls;
-    private static final int EXPORT_LAYOUT = 401, IMPORT_LAYOUT = 402;
-    private String pendingLayoutExport;
+    private MoviePlayer moviePlayer;
+    private volatile int[] gestureInsets = new int[] {0, 0, 0, 0};
 
     @Override
     protected String[] getLibraries() {
@@ -49,160 +32,83 @@ public class HaloActivity extends SDLActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (savedInstanceState != null)
-            pendingLayoutExport = savedInstanceState.getString("pending-layout-export");
-        if (mLayout != null) {
-            touchControls = new TouchControls(this);
-            mLayout.addView(touchControls, new ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        }
+        if (savedInstanceState != null) pendingLayoutExport = savedInstanceState.getString("pending-layout-export");
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        hideSystemBars();
         preferHighestRefreshRate();
         trackGestureInsets();
         acquireMulticastLock();
+        touchControls = new TouchControls(this);
+        addContentView(touchControls, new android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+        if (mLayout != null) moviePlayer = new MoviePlayer(this,mLayout,touchControls);
         // a new version looked for while the game starts
         Updater.start(this);
     }
 
-    /** the system's file picker, for the touch layout; no storage permission */
-    public void chooseLayoutFile(boolean export, String configuration) {
-        String message = export
-            ? "Choose the folder and the name of the touch layout file."
-            : "Choose a touch layout file. It replaces your buttons, the look sensitivity and the General settings.";
-        new AlertDialog.Builder(this)
-            .setTitle(export ? "Export the layout" : "Import a layout")
-            .setMessage(message)
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton(export ? "Choose the place" : "Choose the file", (dialog, which) -> {
-                Intent intent = new Intent(export ? Intent.ACTION_CREATE_DOCUMENT : Intent.ACTION_OPEN_DOCUMENT);
-                intent.addCategory(Intent.CATEGORY_OPENABLE);
-                intent.setType(export ? "text/plain" : "*/*");
-                if (export) {
-                    pendingLayoutExport = configuration;
-                    intent.putExtra(Intent.EXTRA_TITLE, "halo-touch-layout.halolayout");
-                }
-                try {
-                    startActivityForResult(intent, export ? EXPORT_LAYOUT : IMPORT_LAYOUT);
-                } catch (android.content.ActivityNotFoundException e) {
-                    pendingLayoutExport = null;
-                    Toast.makeText(this, "This device has no file picker.", Toast.LENGTH_LONG).show();
-                }
-            })
-            .show();
-    }
-
     @Override
-    protected void onSaveInstanceState(Bundle state) {
-        super.onSaveInstanceState(state);
-        state.putString("pending-layout-export", pendingLayoutExport);
+    protected void onDestroy() {
+        if (moviePlayer != null) moviePlayer.close();
+        if (touchControls != null) touchControls.stopDeviceInput();
+        if (multicastLock != null && multicastLock.isHeld())
+            multicastLock.release();
+        multicastLock = null;
+        super.onDestroy();
     }
 
-    @Override
-    protected void onActivityResult(int request, int result, Intent data) {
-        if (request != EXPORT_LAYOUT && request != IMPORT_LAYOUT) {
-            super.onActivityResult(request, result, data);
-            return;
+    /**
+     * full screen, the status and navigation bars hidden until a swipe from
+     * an edge shows them for a moment. SDL hides them only with the flags
+     * that Android 11 replaced, and only when the game asks, which left the
+     * status bar over the game on some phones, or back after a dialog.
+     */
+    @SuppressWarnings("deprecation") // the flags are the only way before Android 11
+    private void hideSystemBars() {
+        android.view.Window window = getWindow();
+        WindowManager.LayoutParams attributes = window.getAttributes();
+        int cutout = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ?
+            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS :
+            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+
+        if (attributes.layoutInDisplayCutoutMode != cutout) {
+            attributes.layoutInDisplayCutoutMode = cutout;
+            window.setAttributes(attributes);
         }
-        String exported = pendingLayoutExport;
-        pendingLayoutExport = null;
-        if (result != RESULT_OK || data == null || data.getData() == null)
-            return;
-        Uri document = data.getData();
-        // (the file is read and written away from the UI thread)
-        new Thread(() -> {
-            try {
-                if (request == EXPORT_LAYOUT)
-                    writeLayoutFile(document, exported);
-                else
-                    readLayoutFile(document);
-            } catch (Exception e) {
-                runOnUiThread(() -> layoutFileError(e));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.setDecorFitsSystemWindows(false);
+            WindowInsetsController controller = window.getInsetsController();
+            if (controller != null) {
+                controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
             }
-        }, "halo-touch-layout-file").start();
-    }
-
-    private void writeLayoutFile(Uri document, String configuration) throws IOException {
-        if (configuration == null)
-            throw new IOException("the layout to export is gone");
-        try (OutputStream output = getContentResolver().openOutputStream(document, "wt")) {
-            if (output == null)
-                throw new IOException("the file cannot be opened");
-            output.write(configuration.getBytes(StandardCharsets.UTF_8));
+        } else {
+            window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN |
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         }
-        runOnUiThread(() -> Toast.makeText(this, "The layout is exported.", Toast.LENGTH_SHORT).show());
     }
 
-    private void readLayoutFile(Uri document) throws IOException {
-        ByteArrayOutputStream contents = new ByteArrayOutputStream();
-        try (InputStream input = getContentResolver().openInputStream(document)) {
-            if (input == null)
-                throw new IOException("the file cannot be opened");
-            byte[] buffer = new byte[4096];
-            int size;
-            while ((size = input.read(buffer)) != -1) {
-                if (contents.size() + size > 65536)
-                    throw new IOException("the file is too large");
-                contents.write(buffer, 0, size);
-            }
-        }
-        String configuration = new String(contents.toByteArray(), StandardCharsets.UTF_8);
-        // checked here, then applied to the overlay at once
-        TouchLayout.importConfiguration(configuration);
-        runOnUiThread(() -> {
-            if (isFinishing() || isDestroyed() || touchControls == null)
-                return;
-            try {
-                touchControls.importLayout(configuration);
-                Toast.makeText(this, "The layout is imported and saved.", Toast.LENGTH_SHORT).show();
-            } catch (IllegalArgumentException e) {
-                layoutFileError(e);
-            }
-        });
-    }
-
-    private void layoutFileError(Exception error) {
-        if (isFinishing() || isDestroyed())
-            return;
-        new AlertDialog.Builder(this)
-            .setTitle("Touch layout file")
-            .setMessage("The operation did not complete: " + error.getMessage())
-            .setPositiveButton("OK", null)
-            .show();
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        if (touchControls != null && getWindow().getDecorView().hasWindowFocus())
-            touchControls.startDeviceInput();
+    @Override public void onBackPressed() {
+        if (touchControls != null && touchControls.finishHudEditor()) return;
+        super.onBackPressed();
     }
 
     @Override
     protected void onPause() {
-        if (touchControls != null)
-            touchControls.stopDeviceInput();
+        if (touchControls != null) touchControls.persistHudEditor();
+        if (moviePlayer != null) moviePlayer.pause();
+        if (touchControls != null) touchControls.stopDeviceInput();
         super.onPause();
     }
 
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
-        if (touchControls != null) {
-            if (hasFocus)
-                touchControls.startDeviceInput();
-            else
-                touchControls.stopDeviceInput();
-        }
+        if (touchControls != null) { if (hasFocus) touchControls.startDeviceInput(); else touchControls.stopDeviceInput(); }
         super.onWindowFocusChanged(hasFocus);
-    }
-
-    @Override
-    protected void onDestroy() {
-        if (touchControls != null)
-            touchControls.stopDeviceInput();
-        if (multicastLock != null && multicastLock.isHeld())
-            multicastLock.release();
-        multicastLock = null;
-        super.onDestroy();
+        if (hasFocus) hideSystemBars();
     }
 
     /**
@@ -290,5 +196,54 @@ public class HaloActivity extends SDLActivity {
         WindowManager.LayoutParams attributes = getWindow().getAttributes();
         attributes.preferredDisplayModeId = best.getModeId();
         getWindow().setAttributes(attributes);
+    }
+    private static final int EXPORT_LAYOUT = 401, IMPORT_LAYOUT = 402;
+    private String pendingLayoutExport;
+    public void chooseLayoutFile(boolean export, String contents) {
+        pendingLayoutExport = export ? contents : null;
+        android.content.Intent intent = new android.content.Intent(export ? android.content.Intent.ACTION_CREATE_DOCUMENT : android.content.Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(android.content.Intent.CATEGORY_OPENABLE); intent.setType(export ? "text/plain" : "*/*");
+        if (export) intent.putExtra(android.content.Intent.EXTRA_TITLE,"opence-touch.halolayout");
+        try { startActivityForResult(intent,export ? EXPORT_LAYOUT : IMPORT_LAYOUT); }
+        catch (android.content.ActivityNotFoundException e) { pendingLayoutExport = null; layoutError("No document picker is available"); }
+    }
+    @Override protected void onSaveInstanceState(android.os.Bundle state) {
+        state.putString("pending-layout-export",pendingLayoutExport); super.onSaveInstanceState(state);
+    }
+    @Override protected void onActivityResult(int request, int result, android.content.Intent data) {
+        if (request != EXPORT_LAYOUT && request != IMPORT_LAYOUT) { super.onActivityResult(request,result,data); return; }
+        String export = pendingLayoutExport; pendingLayoutExport = null;
+        if (result != RESULT_OK || data == null || data.getData() == null) return;
+        android.net.Uri uri = data.getData();
+        new Thread(()->{
+            try {
+                if (request == EXPORT_LAYOUT) {
+                    if (export == null) throw new java.io.IOException("Layout snapshot is unavailable");
+                    try (java.io.OutputStream out = getContentResolver().openOutputStream(uri,"wt")) {
+                        if (out == null) throw new java.io.IOException("Cannot open destination");
+                        out.write(export.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    }
+                    runOnUiThread(()->android.widget.Toast.makeText(this,"Layout exported",android.widget.Toast.LENGTH_SHORT).show());
+                } else {
+                    java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+                    try (java.io.InputStream in=getContentResolver().openInputStream(uri)) {
+                        if (in==null) throw new java.io.IOException("Cannot open file");
+                        byte[] buffer=new byte[4096];int n;
+                        while ((n=in.read(buffer))!=-1) { if (bytes.size()+n>65536) throw new java.io.IOException("Layout file is too large");bytes.write(buffer,0,n); }
+                    }
+                    String text=new String(bytes.toByteArray(),java.nio.charset.StandardCharsets.UTF_8); TouchConfiguration.decode(text);
+                    runOnUiThread(()->{if(isFinishing()||isDestroyed())return;try{touchControls.importLayout(text);}catch(IllegalArgumentException e){layoutError(e.getMessage());}});
+                }
+            } catch (Exception e) { runOnUiThread(()->layoutError(e.getMessage())); }
+        },"opence-layout-file").start();
+    }
+    private void layoutError(String message) {
+        if(!isFinishing()&&!isDestroyed())new android.app.AlertDialog.Builder(this).setTitle("Layout file").setMessage(message).setPositiveButton("OK",null).show();
+    }
+    @Override protected void onResume() {
+        super.onResume();
+        hideSystemBars();
+        if(touchControls!=null)touchControls.startDeviceInput();
+        if(moviePlayer!=null)moviePlayer.resume();
     }
 }

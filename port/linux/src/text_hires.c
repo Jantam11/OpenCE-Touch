@@ -4,7 +4,8 @@ TEXT_HIRES.C
 The game's text drawn with fonts at the display's resolution (text_hires.h).
 
 Each font tag the fonts draw (port/assets/fonts/fonts.json) gets its font
-sized so that its capitals are as tall as the tag's: the game's layout,
+(the menus' theme's own, if it has one) sized so that its capitals are as
+tall as the tag's: the game's layout,
 from the tag's character widths, is kept, and the fonts were chosen to fit
 the Xbox maps' widths. A tag whose letters are narrower (the fonts of a
 Custom Edition loc.map) gets its font narrowed until its letters are, on
@@ -17,6 +18,7 @@ scale (a window made fullscreen) or a full atlas starts it over.
 */
 
 #include "text_hires.h"
+#include "halo_menus.h"
 #include "platform.h"
 #include "port_config.h"
 #include "xgpu.h"
@@ -42,6 +44,8 @@ each at its oversamples) */
 static struct
 {
 	char tag[64];
+	/* the menus' theme it was found for */
+	char theme[16];
 	/* the tag's measures it was made for */
 	float cap_height;
 	long letters_width;
@@ -96,6 +100,26 @@ int text_hires_enabled(void)
 	return enabled;
 }
 
+/* the embedded font for a tag: the theme's own, else the one for every theme */
+static const struct text_hires_embedded *embedded_font(char const *tag_name, char const *theme)
+{
+	const struct text_hires_embedded *any_theme = NULL;
+	unsigned int index;
+
+	for (index = 0; index < text_hires_embedded_count; index++)
+	{
+		const struct text_hires_embedded *embedded = &text_hires_embedded[index];
+
+		if (!embedded->tag || names_differ(embedded->tag, tag_name))
+			continue;
+		if (embedded->theme && !names_differ(embedded->theme, theme))
+			return embedded;
+		if (!embedded->theme && !any_theme)
+			any_theme = embedded;
+	}
+	return any_theme;
+}
+
 static void (*reset_hook)(void);
 
 void text_hires_set_reset_hook(void (*hook)(void))
@@ -125,7 +149,8 @@ static void atlas_reset(float scale)
 
 long text_hires_font(char const *tag_name, float cap_height, short const *letter_widths, float oversample)
 {
-	unsigned int index;
+	const struct text_hires_embedded *embedded;
+	const char *theme = halo_menus_theme_name(halo_menus_theme());
 	long font;
 	long letters_width = 0;
 	int x0, y0, x1, y1;
@@ -141,7 +166,8 @@ long text_hires_font(char const *tag_name, float cap_height, short const *letter
 	for (font = 0; font < font_count; font++)
 	{
 		if (!names_differ(fonts[font].tag, tag_name) && fonts[font].cap_height == cap_height &&
-			fonts[font].letters_width == letters_width && fonts[font].oversample == oversample)
+			fonts[font].letters_width == letters_width && fonts[font].oversample == oversample &&
+			!strcmp(fonts[font].theme, theme))
 		{
 			return fonts[font].scale > 0.0f ? font : -1;
 		}
@@ -150,46 +176,46 @@ long text_hires_font(char const *tag_name, float cap_height, short const *letter
 		return -1;
 	font = font_count++;
 	snprintf(fonts[font].tag, sizeof(fonts[font].tag), "%s", tag_name);
+	snprintf(fonts[font].theme, sizeof(fonts[font].theme), "%s", theme);
 	fonts[font].cap_height = cap_height;
 	fonts[font].letters_width = letters_width;
 	fonts[font].scale = 0.0f;
 	fonts[font].narrowing = 1.0f;
 	fonts[font].oversample = oversample;
-	for (index = 0; index < text_hires_embedded_count; index++)
+	embedded = embedded_font(tag_name, theme);
+	if (embedded)
 	{
-		const struct text_hires_embedded *embedded = &text_hires_embedded[index];
 		const unsigned char *data = (const unsigned char *)embedded->data;
 
-		if (!embedded->tag || names_differ(embedded->tag, tag_name))
-			continue;
 		if (!stbtt_InitFont(&fonts[font].info, data, stbtt_GetFontOffsetForIndex(data, 0)) ||
 			!stbtt_GetCodepointBox(&fonts[font].info, 'H', &x0, &y0, &x1, &y1) || y1 <= y0)
 		{
 			platform_log("high-res text: could not read %s for %s", embedded->file, tag_name);
-			break;
 		}
-		fonts[font].scale = cap_height / (float)(y1 - y0);
+		else
 		{
-			float tag_width = 0.0f;
-			float font_width = 0.0f;
-
-			for (letter = 0; letter < TEXT_HIRES_FIT_LETTERS; letter++)
+			fonts[font].scale = cap_height / (float)(y1 - y0);
 			{
-				int glyph = stbtt_FindGlyphIndex(&fonts[font].info, letter < 26 ? 'A' + letter : 'a' + letter - 26);
-				int advance = 0, bearing = 0;
+				float tag_width = 0.0f;
+				float font_width = 0.0f;
 
-				if (letter_widths[letter] <= 0 || !glyph)
-					continue;
-				stbtt_GetGlyphHMetrics(&fonts[font].info, glyph, &advance, &bearing);
-				tag_width += letter_widths[letter];
-				font_width += advance * fonts[font].scale;
+				for (letter = 0; letter < TEXT_HIRES_FIT_LETTERS; letter++)
+				{
+					int glyph = stbtt_FindGlyphIndex(&fonts[font].info, letter < 26 ? 'A' + letter : 'a' + letter - 26);
+					int advance = 0, bearing = 0;
+
+					if (letter_widths[letter] <= 0 || !glyph)
+						continue;
+					stbtt_GetGlyphHMetrics(&fonts[font].info, glyph, &advance, &bearing);
+					tag_width += letter_widths[letter];
+					font_width += advance * fonts[font].scale;
+				}
+				if (tag_width > 0.0f && font_width > tag_width)
+					fonts[font].narrowing = tag_width / font_width;
 			}
-			if (tag_width > 0.0f && font_width > tag_width)
-				fonts[font].narrowing = tag_width / font_width;
+			platform_log("high-res text: %s (capitals %.0f units) drawn with %s, %.0f%% wide",
+				tag_name, cap_height, embedded->file, fonts[font].narrowing * 100.0f);
 		}
-		platform_log("high-res text: %s (capitals %.0f units) drawn with %s, %.0f%% wide",
-			tag_name, cap_height, embedded->file, fonts[font].narrowing * 100.0f);
-		break;
 	}
 	return fonts[font].scale > 0.0f ? font : -1;
 }
