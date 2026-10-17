@@ -75,6 +75,10 @@ void host_sdl_scancode_name(int scancode, char *buffer, unsigned int size);
 int host_sdl_scancode_from_name(const char *name);
 int host_sdl_show_toast(const char *message, int duration, int gravity, int x, int y);
 int host_sdl_show_simple_message_box(unsigned int flags, const char *title, const char *message);
+/* SDL_ShowMessageBox of up to three buttons (SDL_MessageBoxData has not the
+guest's layout): the index of the one chosen, else -1 */
+int host_sdl_show_message_box(unsigned int flags, const char *title, const char *message, int default_index,
+	const char *button0, const char *button1, const char *button2);
 int host_sdl_get_gamepads(unsigned int *ids, int capacity);
 unsigned int host_sdl_open_gamepad(unsigned int id);
 unsigned int host_sdl_gamepad_from_id(unsigned int id);
@@ -121,6 +125,7 @@ void host_gesture_insets(int *insets);
 void host_touch_rumble(unsigned int low, unsigned int high);
 int host_touch_camera_read(void);
 float host_touch_field_of_view(void);
+void host_touch_hud_read(float *offsets);
 unsigned int host_touch_cheats_read(int *commands);
 void host_touch_cheat_result(int id, int status);
 void host_touch_cheat_sync(int id, int active);

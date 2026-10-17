@@ -96,6 +96,7 @@ To install the data from a computer:
 | Item | Location in `/sdcard/Android/data/com.halo.decomp/files` |
 | --- | --- |
 | Saved games (`z:\` and `u:\`) | `save` |
+| Mods (`docs/mods.md`) | `mods`: `adb push <mod folder> /sdcard/Android/data/com.halo.decomp/files/mods/`; the main menu's Mods orders them and turns them off |
 | Log | `debug.txt` |
 | Settings | `config.toml` |
 
@@ -182,6 +183,7 @@ Upstream Android settings retained for source compatibility:
 | `input.touch_aim_assist` | Inactive on touch-controls; use `input.mouse_aim_assist` for this overlay. Upstream: `true` (the default): the touch controls' swipe aiming gets the aim assist of a controller (the aim slows over a target and follows a moving one). `false`: none, as with a mouse; the bullets' own autoaim stays. |
 | `input.touch_controls` | Inactive on touch-controls; use OPTIONS to hide or restore this overlay. Upstream: The touch controls in a game. `"auto"` (the default): shown on a touchscreen while no controller is connected. `"on"`: also shown with a controller. `"off"`: never shown. A device without a touchscreen never shows them. The menus take taps in any case. |
 | `display.screen_width` | The number of columns of the 480-line picture. `0` (the default): the shape of the display (1068 on a 20:9 phone). `640`: the 4:3 shape of the Xbox. |
+| `display.texture_decode` | Where the compressed (DXT) textures of the maps are unpacked. `"auto"` (the default): by the game on Adreno graphics (Snapdragon), whose driver draws them with dark speckles, and by the driver on other graphics. `"gpu"`: by the driver. `"cpu"`: by the game, as they load (more memory, as on Mali). |
 | `debug.sample_seconds` | Refer to "Find problems". |
 | `debug.memory_watch` | `true` (the default): the app notices the game's writes to textures and vertices by page protection. `false`: it compares page contents once a frame instead, which is slower. Refer to "Limits". |
 
@@ -263,7 +265,9 @@ The guest is the game, the platform layer and a small runtime:
    AArch64 target of clang. The options `-U__APPLE__` and
    `-fno-define-target-os-macros` hide the Darwin environment.
 2. `tools/android_asm_convert.py` changes the Mach-O assembly to ELF
-   assembly.
+   assembly. It renames symbols, but keeps string literals (`.ascii`,
+   `.asciz`) byte for byte: they hold tables as well as text
+   (`tools/test_android_asm_convert.py`).
 3. The AArch64 assembler makes the objects.
 4. `ld.lld` links the objects with `guest/guest.ld` to a static image,
    `build/android/halo_guest.elf`, at a fixed address above the Xbox memory
@@ -454,3 +458,10 @@ See the root [README's feature credits](../../README.md#mobile-feature-credits) 
 For an Android build with movie support on Linux, set `ANDROID_NDK_HOME` (or `ANDROID_HOME`) and run `python tools/ci_build.py android release`. This compiles the pinned FFmpeg Bink decoder before building the game and APK. When using `ninja android_apk` directly, first run `python tools/build_android_bink.py`; without that optional library the game skips movies. The release build package includes `FFmpeg-LGPL.txt` and `bink-relink.zip` with the exact FFmpeg source, static libraries, player object and relinking instructions. No prebuilt decoder is committed.
 
 Mobile regressions: `python tools/test_android_touch.py` and `python tools/test_android_mobile.py` (JDK with JNI headers and a C compiler). These checks and passing CI do not replace testing gyro, rumble, movies, campaign and multiplayer on a real phone.
+
+
+### OpenCE-Touch 0.6.0
+
+General settings > Edit in-game HUD moves health, weapons and radar panels. Drag, then Save; Android Back also saves. The app retains HUD positions separately from `.halolayout` imports/exports and keeps stock positions in split screen. Settings > Video Setup > Extra Display adds optional timers (off), loading-screen time (no added wait) and draw distance (Stock 1024). Texture decoding defaults to Auto, with a CPU workaround on Adreno; changing it requires restarting. Settings > Network Setup > Privacy exposes only supported services. Press OK in native settings before exiting. Previously invalid duplicate-section config files repair themselves at startup.
+
+Adapted work: ChupathingyCE/MrMilenko, FulGerNet/theLlamaNet, xshxdex98/DamnationCE; see README and INTEGRATION_NOTES for source revisions. MCC maps are not enabled in this release.

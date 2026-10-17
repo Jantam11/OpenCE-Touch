@@ -96,7 +96,7 @@ jobs:
 
       - name: Test
         run: |
-          python -m pytest -q tools/test_linux_port.py tools/test_host_watch_hash.py tools/test_touch_menu.py tools/harness tools/test_profile.py
+          python -m pytest -q tools/test_linux_port.py tools/test_android_asm_convert.py tools/test_host_watch_hash.py tools/test_touch_menu.py tools/harness tools/test_profile.py
           python tools/test_light_storage.py
           python tools/test_sound_lifecycle.py
           python tools/test_sound_transition.py
@@ -137,6 +137,7 @@ jobs:
 
       - name: Touch input regression checks
         run: |
+          python3 tools/test_android_release_features.py
           python3 tools/test_android_touch.py
           python3 tools/test_android_mobile.py
           python3 tools/test_android_render_quit.py
@@ -144,7 +145,7 @@ jobs:
           python3 tools/test_android_touch_merge.py
           python3 tools/test_virtual_keyboard_input.py
           python3 -m pip install pytest
-          python3 -m pytest -q tools/test_touch_menu.py tools/test_linux_port.py -k "menus_are_well_formed or touch_menu"
+          python3 -m pytest -q tools/test_touch_menu.py tools/test_linux_port.py -k "menus_are_well_formed or touch_menu or config_has_each_section_once"
 
       - uses: actions/cache@v4
         with:
@@ -454,7 +455,7 @@ jobs:
     uses: ./.github/workflows/touch-release.yml
     with:
       build_run: ${{ format('{0}', github.run_id) }}
-      tag: v0.5.5-touch
+      tag: v0.6.0-touch
 
   notify:
     # A Discord embed for the run, to the DISCORD_WEBHOOK secret (nothing

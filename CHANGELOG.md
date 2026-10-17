@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.0-touch — 2026-10-17
+
+- Fixed settings resetting after restarting, including recovery of duplicated configuration sections.
+- Updated OpenCE with resource-pack controls, live HUD/text settings, co-op/menu repairs and safer map sharing. Multiplayer now uses **protocol 29**.
+- Added movable health, weapon and radar HUD panels, improved fullscreen behaviour, an Adreno texture workaround, tappable setting arrows and clearer server selections with measured, coloured pings.
+- Added **Video Setup → Extra Display** for optional powerup timers, loading-screen time and draw distance. Timers start off, loading adds no wait, and draw distance starts at **Stock (1024)**. Added **Network Setup → Privacy** for supported listing, invite, router, voice and update controls.
+
+**Credits:** [OpenCE contributors](https://github.com/OpenCommunityEdition/OpenCE); [ChupathingyCE / MrMilenko](https://github.com/ChupathingyCE/chupathingyce) for Android/display improvements and the privacy-settings approach; [FulGerNet / theLlamaNet](https://github.com/FulGerNet/halo-ce-android) for HUD panel editing; [xshxdex98 / DamnationCE](https://github.com/xshxdex98/DamnationCE) for setting arrows, server pings and selection improvements. Earlier credits remain in the [README](README.md).
+
+MCC map support remains deferred: its integration and Android runtime checks have not cleared this release’s validation requirements.
+
+[Full comparison](https://github.com/Jantam11/OpenCE-Touch/compare/v0.5.5-touch...v0.6.0-touch)
+
 ## 0.5.5-touch — 2026-10-12
 
 - Added Custom Edition map sharing between multiplayer players and browser/native Internet play. Multiplayer now uses **protocol 27**; older clients must update.

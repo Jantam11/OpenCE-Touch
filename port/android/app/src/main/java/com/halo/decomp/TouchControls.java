@@ -61,6 +61,11 @@ public final class TouchControls extends View implements android.hardware.Sensor
     private final Map<Integer, Integer> held = new HashMap<>();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF editRect = new RectF(), menuRect = new RectF(), optionsRect = new RectF();
+    // HUD panels adapted from FulGerNet/halo-ce-android db04b1d4.
+    private HudLayout hud;
+    private boolean hudEditing;
+    private int hudPointer = -1, hudPanel = -1;
+    private float hudLastX, hudLastY;
     private boolean editing, menuTouch = true, menus = true;
     private int inputMode = -1;
     private float pointerX, pointerY;
@@ -83,6 +88,8 @@ public final class TouchControls extends View implements android.hardware.Sensor
         defaults();
         load();
         loadFeatures();
+        hud = HudLayout.load(prefs.getString("hud-layout", null));
+        nativeHudLayout(hud.offsets());
     }
 
     @Override protected void onAttachedToWindow() {
@@ -225,6 +232,7 @@ public final class TouchControls extends View implements android.hardware.Sensor
     }
 
     @Override protected void onDraw(Canvas canvas) {
+        if (hudEditing) { drawHudEditor(canvas); return; }
         if (movieActive) return;
         if (settings.fps && !menus && !editing && !settings.overlayDisabled) {
             paint.setColor(Color.WHITE); paint.setAlpha(255); paint.setTextSize(dp(14));
@@ -300,6 +308,7 @@ public final class TouchControls extends View implements android.hardware.Sensor
     }
 
     @Override public boolean onTouchEvent(MotionEvent e) {
+        if (hudEditing) return hudTouch(e);
         refreshMode();
         if ((inputMode & 4) == 0 || movieActive) return true;
         if (settings.overlayDisabled && !editing) {
@@ -518,6 +527,7 @@ public final class TouchControls extends View implements android.hardware.Sensor
     private static native boolean nativeCheatRequest(int id, boolean enabled);
     private static native int nativeCheatStatus(int id);
     private static native void nativeFieldOfView(float degrees);
+    private static native void nativeHudLayout(float[] offsets);
     private static native int[] nativeMenuPoll();
     private static native void nativeMenuPublish(int revision, int page, boolean editing,
         String title, String[] labels, int[] actions, int[] values);
@@ -559,13 +569,13 @@ public final class TouchControls extends View implements android.hardware.Sensor
         if (vibrator != null) try { vibrator.cancel(); } catch (RuntimeException ignored) {}
     }
     private void updateSensors() {
-        boolean needed = deviceInputActive && !menus && !editing && !movieActive && !settings.overlayDisabled && settings.gyro && gyroscope != null;
+        boolean needed = deviceInputActive && !menus && !editing && !hudEditing && !movieActive && !settings.overlayDisabled && settings.gyro && gyroscope != null;
         if (needed && !gyroRegistered) { gyroAim.reset(); gyroRegistered = sensors.registerListener(this,gyroscope,android.hardware.SensorManager.SENSOR_DELAY_GAME); }
         else if (!needed && gyroRegistered) { sensors.unregisterListener(this); gyroRegistered = false; gyroAim.reset(); }
     }
     @Override public void onAccuracyChanged(android.hardware.Sensor sensor, int accuracy) {}
     @Override public void onSensorChanged(android.hardware.SensorEvent event) {
-        if (!deviceInputActive || !settings.gyro || menus || editing || movieActive || settings.overlayDisabled) { gyroAim.reset(); return; }
+        if (!deviceInputActive || !settings.gyro || menus || editing || hudEditing || movieActive || settings.overlayDisabled) { gyroAim.reset(); return; }
         int rotation = activity.getWindowManager().getDefaultDisplay().getRotation();
         if (gyroAim.sample(event.timestamp,event.values[0],event.values[1],rotation,gyroDelta))
             mouseMove(-gyroDelta[0]/.0022f*settings.gyroSensitivity,-gyroDelta[1]/.0022f*settings.gyroSensitivity,true);
@@ -574,7 +584,7 @@ public final class TouchControls extends View implements android.hardware.Sensor
         updateSensors();
         if (!deviceInputActive || movieActive) return;
         int[] state = nativeMenuPoll();
-        if (state != null) { currentFps = state[5]; menuContext = state[1]; if (state[2] == 1) options(); }
+        if (state != null) { currentFps = state[5]; menuContext = state[1]; if (state[2] == 90 && hudEditing) finishHudEditor(); else if (state[2] == 1 && !hudEditing) options(); }
         if (vibrator != null && vibrator.hasVibrator()) try {
             int amplitude = settings.rumble && !menus && !editing && !settings.overlayDisabled ? nativeRumble() : 0;
             if (amplitude > 0) vibrator.vibrate(android.os.VibrationEffect.createOneShot(110,
@@ -592,9 +602,12 @@ public final class TouchControls extends View implements android.hardware.Sensor
         String[] rows = {"Gyroscope: " + (gyroscope == null ? "unavailable" : settings.gyro ? "ON" : "OFF"),
             "Gyroscope sensitivity", "Rumble: " + (vibrator == null || !vibrator.hasVibrator() ? "unavailable" : settings.rumble ? "ON" : "OFF"),
             "FPS counter: " + (settings.fps ? "ON" : "OFF"), "Field of view: " + Math.round(settings.fov),
-            "Halo icons: " + (settings.icons ? "ON" : "OFF"), "Disable overlay: " + (settings.overlayDisabled ? "ON" : "OFF")};
+            "Halo icons: " + (settings.icons ? "ON" : "OFF"), "Disable overlay: " + (settings.overlayDisabled ? "ON" : "OFF"), "Edit in-game HUD"};
         new AlertDialog.Builder(activity).setTitle("General settings").setItems(rows,(d,i)->{
             releaseAll();
+            if (i == 7) { hudEditing = true; hudPointer = hudPanel = -1;
+                nativeMenuPublish(2, 1, true, "HUD layout", new String[0], new int[0], new int[0]);
+                updateSensors(); invalidate(); return; }
             if (i == 0 && gyroscope != null) settings.gyro = !settings.gyro;
             else if (i == 1 || i == 4) {
                 boolean fov = i == 4; LinearLayout layout = dialogLayout();
@@ -610,6 +623,61 @@ public final class TouchControls extends View implements android.hardware.Sensor
             saveFeatures(); generalSettings();
         }).setNegativeButton("Close",null).show();
     }
+
+    private void drawHudEditor(Canvas canvas) {
+        paint.setStyle(Paint.Style.FILL); paint.setAlpha(255);
+        for (int panel = 0; panel < HudLayout.COUNT; panel++) {
+            float[] b = hud.bounds(panel, getWidth(), getHeight());
+            paint.setColor(panel == hudPanel ? 0x7783d9ff : 0x55304050);
+            canvas.drawRoundRect(b[0], b[1], b[2], b[3], dp(10), dp(10), paint);
+            paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(dp(2)); paint.setColor(Color.WHITE);
+            canvas.drawRoundRect(b[0], b[1], b[2], b[3], dp(10), dp(10), paint);
+            paint.setStyle(Paint.Style.FILL); paint.setTextAlign(Paint.Align.CENTER); paint.setTextSize(dp(16));
+            canvas.drawText(HudLayout.name(panel), (b[0]+b[2])/2, (b[1]+b[3])/2, paint);
+        }
+        toolbar(canvas, editRect, "SAVE"); toolbar(canvas, menuRect, "RESET");
+        paint.setColor(Color.WHITE); paint.setAlpha(255); paint.setTextSize(dp(12));
+        paint.setTextAlign(Paint.Align.CENTER);
+        canvas.drawText("Drag the panels, then SAVE. Back also saves.", getWidth()/2f, editRect.bottom+dp(18), paint);
+    }
+    private boolean hudTouch(MotionEvent event) {
+        int action = event.getActionMasked(), index = event.getActionIndex(), id = event.getPointerId(index);
+        if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
+            if (hudPointer < 0) {
+                float x = event.getX(index), y = event.getY(index);
+                if (editRect.contains(x,y)) { finishHudEditor(); performClick(); return true; }
+                if (menuRect.contains(x,y)) { hud.reset(); nativeHudLayout(hud.offsets()); invalidate(); performClick(); return true; }
+                hudPanel = hud.hit(x,y,getWidth(),getHeight());
+                if (hudPanel >= 0) { hudPointer=id; hudLastX=x; hudLastY=y; }
+            }
+        } else if (action == MotionEvent.ACTION_MOVE && hudPointer >= 0) {
+            int pointer=event.findPointerIndex(hudPointer);
+            if (pointer >= 0) {
+                float x=event.getX(pointer), y=event.getY(pointer);
+                hud.move(hudPanel,x-hudLastX,y-hudLastY,getWidth(),getHeight());
+                hudLastX=x; hudLastY=y; nativeHudLayout(hud.offsets()); invalidate();
+            }
+        } else if (action == MotionEvent.ACTION_CANCEL ||
+                   ((action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_POINTER_UP) && id == hudPointer)) {
+            hudPointer=hudPanel=-1; persistHudEditor(); invalidate();
+        }
+        return true;
+    }
+    public void persistHudEditor() {
+        if (hudEditing && !prefs.edit().putString("hud-layout",hud.save()).commit())
+            toast("Could not save the HUD layout. Try SAVE again.");
+    }
+    public boolean finishHudEditor() {
+        if (!hudEditing) return false;
+        if (!prefs.edit().putString("hud-layout",hud.save()).commit()) {
+            toast("Could not save the HUD layout. Try again."); return true;
+        }
+        hudEditing=false; hudPointer=hudPanel=-1;
+        nativeMenuPublish(1, 0, false, "Porting options", new String[0], new int[0], new int[0]);
+        releaseAll(); updateSensors(); invalidate();
+        generalSettings(); return true;
+    }
+
     private static final String[] CHEATS = {"Invincibility","Jetpack","Infinite ammo","Bump possession","Super jump","Reflexive damage","Medusa","Omnipotent","Controller cheats","Bottomless clip","Active camouflage (player)","Active camouflage","All powerups","All vehicles","All weapons","Teleport to camera"};
     private void cheatSettings() {
         String[] rows = CHEATS.clone();

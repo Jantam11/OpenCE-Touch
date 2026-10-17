@@ -40,6 +40,14 @@ and `foot` signatures, the Xbox cache version and the build of a retail disc,
 `01.10.12.2276`, or of the decompilation, `01.01.14.2342`). A disc image is
 untrusted input: the reader checks every offset and size in it.
 
+Mods (`docs/mods.md`): under **Mods**, **Add a mod folder…** copies a mod's
+`mod.toml` and `tags` folder into the browser's storage (`mods/`, which the
+game reads as a native build reads the data root's), replacing a mod of the
+same folder's name, and **Remove** deletes one. The folder's paths are
+checked as it is copied (`mods-worker.js`). Every mod is on; the game's main
+menu, Mods, orders them and turns them off. The game asks in a dialog of the
+page when mods say they cannot be played together (`web_js_ask`).
+
 The page asks the browser to keep the site's data. A browser that is short
 of space may delete it otherwise; **Settings and data** says which. The
 storage belongs to the site's address: `halocombatevolved.com` and the
@@ -278,8 +286,14 @@ multiply-adds). `tools/web_build.py` writes the graph.
     rather than pointing each attribute again. The renderer draws only from
     buffers, so Emscripten's emulation of client-side arrays (`FULL_ES3`),
     which wrapped every draw, is not linked.
-  - Buffer writes are copies the browser orders with the draws, so the
-    streaming buffers never wait for the GPU (`port/web/src/web_gl_host.c`).
+  - Buffer writes are copies the browser orders with the draws, but WebGL
+    on Metal (ANGLE, in Chrome and Safari on a Mac) first waits for the GPU
+    to finish what was queued before when a queued draw reads the buffer.
+    So each draw's vertices and indices go into a buffer that no queued
+    draw reads: one of a pool for each frame of the ring, in sizes of 4 KB
+    to 32 MB, written again only when that frame comes round again
+    (`web_chunk_get` in `d3d8_gl.c`). Written after each draw into one
+    buffer, as before, the frames waited for the GPU some 2000 times each.
 - **Memory watch.** WebAssembly cannot protect pages, so the textures'
   memory is watched by hashing it once a frame, as the Android host does
   under the x86 emulator (`port/web/src/web_memory_watch.c`,
@@ -389,7 +403,7 @@ a first visit downloads about 10 MB, compressed).
 | `port/web/src/web_stubs.c` | UPnP and an MSVC intrinsic |
 | `port/web/src/web_shared.h`, `web_touch.c` | The words of memory the page reads and writes: frames shown, the touch controls' state |
 | `port/web/src/web_library.js`, `web_pre.js` | The JavaScript halves: messages to the page, the brokers' WebSockets, the workers' errors |
-| `port/web/site/` | The page (`index.html`, `app.js`, `style.css`), the touch controls (`touch.js`), rooms (`net.js`), internet play's WebRTC (`p2p.js`), its service worker (`sw.js`), the importer (`xiso-worker.js`), the web app's manifest and icons |
+| `port/web/site/` | The page (`index.html`, `app.js`, `style.css`), the touch controls (`touch.js`), rooms (`net.js`), internet play's WebRTC (`p2p.js`), its service worker (`sw.js`), the importers (`xiso-worker.js`, the maps; `mods-worker.js`, the mods), the web app's manifest and icons |
 | `port/web/stamp_version.py`, `licenses.py` | `version.json` and `licenses.txt` |
 | `port/web/tests/` | The tests above |
 | `tools/web_serve.py` | A local server for the site |

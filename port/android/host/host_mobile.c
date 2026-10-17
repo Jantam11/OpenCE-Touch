@@ -21,6 +21,7 @@ static struct halo_porting_menu porting_menu;
 static int frame_count, frame_fps;
 static struct timespec frame_time;
 static float field_of_view = 70.0f;
+static float hud_offsets[6];
 
 JNIEXPORT void JNICALL Java_com_halo_decomp_TouchControls_nativeFieldOfView(
     JNIEnv *env, jclass cls, jfloat degrees)
@@ -29,6 +30,28 @@ JNIEXPORT void JNICALL Java_com_halo_decomp_TouchControls_nativeFieldOfView(
     if (!(degrees >= 55.0f && degrees <= 90.0f)) return;
     pthread_mutex_lock(&touch_lock);
     field_of_view = degrees;
+    pthread_mutex_unlock(&touch_lock);
+}
+
+JNIEXPORT void JNICALL Java_com_halo_decomp_TouchControls_nativeHudLayout(
+    JNIEnv *env, jclass cls, jfloatArray values)
+{
+    jfloat next[6];
+    int i;
+    (void)cls;
+    if (!values || (*env)->GetArrayLength(env, values) != 6) return;
+    (*env)->GetFloatArrayRegion(env, values, 0, 6, next);
+    for (i = 0; i < 6; ++i)
+        if (!(next[i] >= -1.0f && next[i] <= 1.0f)) return;
+    pthread_mutex_lock(&touch_lock);
+    memcpy(hud_offsets, next, sizeof(hud_offsets));
+    pthread_mutex_unlock(&touch_lock);
+}
+
+void host_touch_hud_read(float *offsets)
+{
+    pthread_mutex_lock(&touch_lock);
+    memcpy(offsets, hud_offsets, sizeof(hud_offsets));
     pthread_mutex_unlock(&touch_lock);
 }
 

@@ -10,6 +10,14 @@
 Get the Android touch version from this fork's [Releases](https://github.com/Jantam11/OpenCE-Touch/releases)
 ([latest APK](https://github.com/Jantam11/OpenCE-Touch/releases/latest/download/OpenCE-Touch.apk)).
 
+## 0.6.0-touch additions
+
+Settings survive app restarts and old duplicated configuration sections are repaired. **OPTIONS → General settings → Edit in-game HUD** moves the weapons, health and radar panels; Save and Android Back keep the layout. Touch layout imports/exports leave the HUD layout alone.
+
+**Settings → Video Setup → Extra Display** contains powerup timers (off), loading-screen minimum time (no extra wait), draw distance (**Stock (1024)**) and Android texture decoding (**Auto**, with the Adreno workaround). **Settings → Network Setup → Privacy** groups public listings, clipboard invites, UPnP requests, voice and update checks. Save native settings with **OK**. No match-stat switches are added because this fork has no such reporting service.
+
+New adaptations credit [ChupathingyCE/MrMilenko](https://github.com/ChupathingyCE/chupathingyce) (fullscreen, textures, timers/loading screen, draw distance and privacy-page approach), [FulGerNet/theLlamaNet](https://github.com/FulGerNet/halo-ce-android) (HUD editing), and [xshxdex98/DamnationCE](https://github.com/xshxdex98/DamnationCE) (setting arrows, server pings and selection). OpenCE provides the upstream fixes and resource packs. Multiplayer uses **protocol 29**. MCC support is not included in this release.
+
 ## Mobile feature credits
 
 - [theLlamaNet / FulGer — halo-ce-android](https://github.com/theLlamaNet/halo-ce-android): gyroscope aiming, rumble, fire-button drag aiming, Halo-style vector icons, portable layouts, Porting options, FOV/FPS settings, single-player cheats, free camera and encrypted relay fallback. Adapted to retain this fork's SDL virtual gamepad and working menu/profile-keyboard taps.
@@ -22,7 +30,7 @@ Open **OPTIONS** or the native **Porting options** menu to change settings. Layo
 
 ## Update in 0.5.5-touch
 
-Custom Edition map sharing, browser/native Internet play, rendering improvements, optional first-person legs and shield effects, co-op/lobby fixes, and DamnationCE's touchscreen selection fix. Credits and details are in the [changelog](CHANGELOG.md). Multiplayer uses **protocol 27**; older clients must update.
+Custom Edition map sharing, browser/native Internet play, rendering improvements, optional first-person legs and shield effects, co-op/lobby fixes, and DamnationCE's touchscreen selection fix. Credits and details are in the [changelog](CHANGELOG.md). Multiplayer uses **protocol 29**; older clients must update.
 
 ## Android fixes in 0.5.1-touch
 
@@ -78,6 +86,10 @@ release, and the web site then plays it. The [Releases](https://github.com/OpenC
 page keeps the last five releases. If the latest build has a problem, get
 an older build from that page.
 
+### Arch-based Linux Distributions
+
+The above Linux binary release is available on the [AUR](https://aur.archlinux.org/packages/opence-bin).
+
 ## Game data
 
 The port does not include the game data. Download an Xbox disc image
@@ -96,6 +108,15 @@ data folder. Refer to [port/android/README.md](port/android/README.md). On
 the web, the page copies `maps/` out of the disc image into the browser's
 storage for the site; nothing is uploaded. Refer to
 [port/web/README.md](port/web/README.md).
+
+## Mods
+
+Mods are folders of Halo PC tag files, as the Halo Editing Kit and Invader
+write them, in `mods/` next to `maps/`: texture, sound and text packs that
+play over the maps' on your machine only, in any game. Each has a
+`mod.toml`. Every mod in the folder is on; the main menu's Mods turns them
+off and on and sets the order they load in.
+Refer to [docs/mods.md](docs/mods.md).
 
 ## Platforms
 

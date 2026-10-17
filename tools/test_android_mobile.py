@@ -96,7 +96,22 @@ C_TEST = r'''
 #include "port/android/host/host_movie.c"
 #include "port/android/host/host_mobile.c"
 void host_logf(int level, const char *fmt, ...) {(void)level;(void)fmt;}
+static jsize hud_length = 6;
+static float hud_input[6];
+static jsize fake_length(JNIEnv *env, jarray array) {(void)env;(void)array;return hud_length;}
+static void fake_floats(JNIEnv *env,jfloatArray array,jsize start,jsize count,jfloat *out) {
+ (void)env;(void)array;memcpy(out,hud_input+start,(size_t)count*sizeof(float));
+}
 int main(void) {
+ struct JNINativeInterface_ functions={0};functions.GetArrayLength=fake_length;functions.GetFloatArrayRegion=fake_floats;
+ JNIEnv jni=&functions;float offsets[6];
+ hud_input[0]=.25f;hud_input[5]=-.2f;
+ Java_com_halo_decomp_TouchControls_nativeHudLayout(&jni,NULL,(jfloatArray)1);
+ host_touch_hud_read(offsets);assert(offsets[0]==.25f&&offsets[5]==-.2f);
+ hud_input[0]=2;Java_com_halo_decomp_TouchControls_nativeHudLayout(&jni,NULL,(jfloatArray)1);
+ host_touch_hud_read(offsets);assert(offsets[0]==.25f);
+ hud_length=5;hud_input[0]=.5f;Java_com_halo_decomp_TouchControls_nativeHudLayout(&jni,NULL,(jfloatArray)1);
+ host_touch_hud_read(offsets);assert(offsets[0]==.25f);
  const char *asset;
  strcpy(movie_assets[0].name,"INTRO.BIK");strcpy(movie_assets[1].name,"intro_fr.bik");movie_asset_count=2;
  assert(movie_resolve("d:\\bink\\intro.bik",&asset)==1&&!strcmp(asset,"INTRO.BIK"));

@@ -153,3 +153,16 @@ progress/cancel/retry, compatibility/hash checks, available-storage checks and
 persistent offline storage. Avoid automatically downloading the whole pack.
 No pfista downloader/map-management code or map files are included in this
 integration; it was requested for explanation only.
+
+
+# 2026-10-17 — OpenCE-Touch 0.6.0
+
+Authorization: selected upstream/settings repair plus A/B/C/D/E/F/G; J only if integration was clear. Retained upstream merge parent 01797c04 (build-217, successful upstream run 39004295351). Protocol 29. Settings restart regression reproduces v0.5.5's duplicated-section failure and passes with automatic repair. Android CI now includes it.
+
+Source credits retained by cherry-pick -x: ChupathingyCE/MrMilenko dba13a10 (fullscreen/Adreno), 2b752f7d plus 7b30ce62 (timers/loading screen), f930d22c (draw distance); DamnationCE/xshxdex98 3bd966cf4 (arrows), 98889fc72 (measured pings), 335c6522e (ping colours), 472d23224 (selected rows). Resolutions retain fork relay registrations, retired-session identifiers, themed fonts and mobile lifecycle; they omit donor-only browser/follow-camera modules.
+
+Adapted FulGerNet/theLlamaNet db04b1d4 HUD model and native HUD-placement hooks without replacing this fork's virtual controller. The JNI bridge validates complete, finite offset snapshots; Java panels are bounded, separately saved and unaffected by layout import/export. Back/save/lifecycle persist the editor. ChupathingyCE 36e6fc86 informed the Privacy page's structure; this fork has no donor stats services, so only actual supported listing, clipboard, UPnP, update and voice controls appear.
+
+Extra Display exposes powerup timers off, loading minimum zero, far distance Stock (1024), and texture decoding Auto. Theme screen generation retains palettes/header positions. Existing native menu OK/Cancel semantics remain. MCC/GulchCE 3e0498d5 was assessed in an isolated merge: 11 conflicted integration files across loader, networking, renderer, menus and Android build; 22 selected format/memory/protocol checks passed, 8 skipped. Android gameplay/maps and the combined loader build are unverified, with Android limitations also documented by GulchCE. J is therefore not included under the conditional authorization. No MCC game assets were used or distributed.
+
+Local passes: Android touch/controller/keyboard coordinates, mobile Java and JNI bridges, gyro/layout and new HUD geometry/persistence tests, renderer/Quit/themes, camera ownership, map browser, keyboard regression, config restart/repair and display-option bounds/network-delay checks. Embedded assets regenerate successfully. Complete Android debug/release APK builds and CI remain the release gate; physical-phone gameplay/GPU/networking is not claimed.
