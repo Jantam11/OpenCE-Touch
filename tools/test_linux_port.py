@@ -428,6 +428,11 @@ def test_config_has_each_section_once(tmp_path):
     def sections():
         return re.findall(r"^\[(\w+)\]$", config.read_text(), re.M)
 
+    # New optional features retain stock defaults before any edits.
+    assert run("get", "display.powerup_timers")[0] == "false"
+    assert run("get", "display.loading_screen_min_seconds")[0] == "0"
+    assert run("get", "display.far_clip_distance")[0] == "1024"
+    assert run("get", "display.texture_decode")[0] == "auto"
     # the defaults
     assert run("get", "display.first_person_legs")[0] == "false"
     assert len(sections()) == len(set(sections())), sections()
@@ -441,7 +446,9 @@ def test_config_has_each_section_once(tmp_path):
                "audio.resampling": "linear", "display.theme": "cairo",
                "display.powerup_timers": "true", "display.loading_screen_min_seconds": "3",
                "display.far_clip_distance": "4096", "display.texture_decode": "cpu",
-               "network.public_lobby": "false", "network.host_public": "false"}
+               "network.public_lobby": "false", "network.host_public": "false",
+               "network.allow_upnp": "false", "network.join_from_clipboard": "false",
+               "update.auto": "false", "audio.voice_chat": "off"}
     for name, value in choices.items():
         run("write", name, value)
     for name, value in choices.items():
