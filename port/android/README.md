@@ -159,6 +159,10 @@ Upstream's separate overlay and its `input.touch_controls` and
 consuming the fork's input. The upstream gesture helper remains available
 for SDL surface events; the fork's menu overlay sends SDL mouse events.
 
+In a private network game, D-pad Up opens the text-chat keyboard. The editable
+overlay hides while it is open; tap keys to type, SEND to send, or outside
+the keyboard to close it. Public server-browser games keep text chat off.
+
 Export your layout before replacing a preset or clearing app data. Removing
 the app's data or uninstalling removes its saved preferences.
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.1-touch — 2026-10-18
+
+- Updated OpenCE with multiplayer text chat, a tappable chat keyboard, player muting and optional streamer-mode filters. Public server-browser games keep text chat off; multiplayer remains **protocol 29**.
+- Added model replacements for compatible resource packs and faster map sharing.
+- Connected chat typing to the editable Android controls and fixed Linear audio interpolation. Existing audio choices are retained under **Audio Setup → Sound Processing**.
+
+**Credits:** [OpenCE contributors](https://github.com/OpenCommunityEdition/OpenCE), including MrBruh and [WhiteI3ulL](https://github.com/WhiteI3ulL) for the updated audio resampler. Earlier fork credits remain in the [README](README.md).
+
+[Full comparison](https://github.com/Jantam11/OpenCE-Touch/compare/v0.6.0-touch...v0.6.1-touch)
+
 ## 0.6.0-touch — 2026-10-17
 
 - Fixed settings resetting after restarting, including recovery of duplicated configuration sections.

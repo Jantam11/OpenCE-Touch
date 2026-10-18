@@ -17,6 +17,7 @@ and the debug keyboard that the game's console reads.
 #include "port_mods.h"
 #include "xiso.h"
 #include "touch_input.h"
+#include "../game/text_filter.h"
 
 #include <SDL3/SDL.h>
 #include <stdio.h>
@@ -63,6 +64,37 @@ gone, ends: else the keyboard stays held from the game) */
 static Uint64 binding_polled_ms;
 #define BINDING_ABANDONED_MS 500
 static unsigned mouse_buttons_down;
+#if defined(HALO_ANDROID) && defined(HALO_TOUCH_SDL_GAMEPAD)
+/* The editable overlay sends absolute SDL mouse taps for the chat keyboard. */
+extern unsigned char network_chat_keyboard_open(void);
+static int chat_pointer_taps;
+static float chat_pointer_x, chat_pointer_y;
+
+static int chat_pointer_event(int open, int down, int button, float x, float y, int width, int height)
+{
+    if (!open) { chat_pointer_taps = 0; return 0; }
+    if (!down && button == SDL_BUTTON_LEFT && width > 0 && height > 0 &&
+        x >= 0.0f && y >= 0.0f && x <= width && y <= height)
+    {
+        chat_pointer_x = x / (float)width;
+        chat_pointer_y = y / (float)height;
+        chat_pointer_taps = 1;
+    }
+    return 1;
+}
+
+int platform_chat_taps(float *x, float *y)
+{
+ int taps;
+ pthread_mutex_lock(&input_lock);
+ taps = chat_pointer_taps;
+ *x = chat_pointer_x; *y = chat_pointer_y;
+ chat_pointer_taps = 0;
+ pthread_mutex_unlock(&input_lock);
+ return taps;
+}
+#endif
+
 /* (an input taken that nothing asks for is let go after this) */
 #define BINDING_UNCLAIMED_MS 2000
 /* the multiplayer scoreboard is open (platform_scoreboard_scroll): the wheel
@@ -1240,6 +1272,9 @@ void platform_show_message(const char *title, const char *message)
 	pthread_mutex_lock(&platform_message_lock);
 	snprintf(platform_message_title, sizeof(platform_message_title), "%s", title);
 	snprintf(platform_message_text, sizeof(platform_message_text), "%s", message);
+	/* (streamer mode's words hidden here too: a map's or a mod's name) */
+	text_filter_utf8(platform_message_title);
+	text_filter_utf8(platform_message_text);
 	platform_message_pending = TRUE;
 	pthread_mutex_unlock(&platform_message_lock);
 }
@@ -1252,10 +1287,36 @@ void web_js_ask(const char *title, const char *text, const char *labels);
 
 int platform_ask(const char *title, const char *text, const char *const *labels, int count, int default_index)
 {
+	/* (streamer mode's words hidden here too: mods' names) */
+	static char shown_title[128];
+	static char shown_text[4096];
+	static char shown_labels[3][128];
+	const char *shown[3];
+	int index;
 #ifdef HALO_WEB
 	char joined[512] = "";
-	int index;
+#else
+	SDL_MessageBoxButtonData buttons[3];
+	SDL_MessageBoxData question;
+	int answer = -1;
+#endif
 
+	if (count > 3)
+		count = 3;
+	snprintf(shown_title, sizeof(shown_title), "%s", title);
+	snprintf(shown_text, sizeof(shown_text), "%s", text);
+	text_filter_utf8(shown_title);
+	text_filter_utf8(shown_text);
+	for (index = 0; index < count; index++)
+	{
+		snprintf(shown_labels[index], sizeof(shown_labels[index]), "%s", labels[index]);
+		text_filter_utf8(shown_labels[index]);
+		shown[index] = shown_labels[index];
+	}
+	title = shown_title;
+	text = shown_text;
+	labels = shown;
+#ifdef HALO_WEB
 	/* (the page's dialog: the game's thread waits for the player there, as
 	SDL's box would, which a page's worker cannot show) */
 	for (index = 0; index < count; index++)
@@ -1271,13 +1332,6 @@ int platform_ask(const char *title, const char *text, const char *const *labels,
 	(void)default_index;
 	return __atomic_load_n(&web_shared[_web_answer], __ATOMIC_SEQ_CST);
 #else
-	SDL_MessageBoxButtonData buttons[3];
-	SDL_MessageBoxData question;
-	int answer = -1;
-	int index;
-
-	if (count > 3)
-		count = 3;
 	for (index = 0; index < count; index++)
 	{
 		buttons[index].flags = index == default_index ?
@@ -1533,6 +1587,9 @@ void platform_pump_events(void)
 #endif
 			break;
 		case SDL_EVENT_MOUSE_MOTION:
+#if defined(HALO_ANDROID) && defined(HALO_TOUCH_SDL_GAMEPAD)
+            if (network_chat_keyboard_open()) break;
+#endif
 #ifndef HALO_ANDROID
 			if (scoreboard_pointer_active)
 			{
@@ -1555,6 +1612,14 @@ void platform_pump_events(void)
 			break;
 		case SDL_EVENT_MOUSE_BUTTON_DOWN:
 		case SDL_EVENT_MOUSE_BUTTON_UP:
+#if defined(HALO_ANDROID) && defined(HALO_TOUCH_SDL_GAMEPAD)
+            {
+                int width, height;
+                platform_video_window_size(&width, &height);
+                if (chat_pointer_event(network_chat_keyboard_open(), event.button.down, event.button.button,
+                    event.button.x, event.button.y, width, height)) break;
+            }
+#endif
 			if (event.button.button < 32)
 			{
 				if (event.button.down)

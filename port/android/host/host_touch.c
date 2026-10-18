@@ -83,5 +83,6 @@ JNIEXPORT jint JNICALL Java_com_halo_decomp_TouchInput_mode(JNIEnv *env, jclass 
     (void)env; (void)cls;
     pthread_mutex_lock(&touch_lock); ready = touch_ready; pthread_mutex_unlock(&touch_lock);
     return (SDL_GetHintBoolean("OPEN_CE_TOUCH_MENUS", true) ? 1 : 0) |
-        (SDL_GetHintBoolean("OPEN_CE_TOUCH_KEYBOARD", false) ? 2 : 0) | (ready ? 4 : 0);
+        (SDL_GetHintBoolean("OPEN_CE_TOUCH_KEYBOARD", false) ? 2 : 0) | (ready ? 4 : 0) |
+        (SDL_GetHintBoolean("OPEN_CE_TOUCH_CHAT", false) ? 8 : 0);
 }

@@ -106,7 +106,7 @@ public final class TouchControls extends View implements android.hardware.Sensor
         int mode = TouchInput.mode();
         if (mode == inputMode) return;
         releaseAll();
-        boolean nextMenus = (mode & 1) != 0;
+        boolean nextMenus = (mode & (1 | 8)) != 0;
         if (nextMenus != menus) {
             editing = false;
             menuTouch = nextMenus;
@@ -232,6 +232,7 @@ public final class TouchControls extends View implements android.hardware.Sensor
     }
 
     @Override protected void onDraw(Canvas canvas) {
+        if ((inputMode & 8) != 0) return;
         if (hudEditing) { drawHudEditor(canvas); return; }
         if (movieActive) return;
         if (settings.fps && !menus && !editing && !settings.overlayDisabled) {
@@ -311,6 +312,13 @@ public final class TouchControls extends View implements android.hardware.Sensor
         if (hudEditing) return hudTouch(e);
         refreshMode();
         if ((inputMode & 4) == 0 || movieActive) return true;
+        if ((inputMode & 8) != 0) {
+            int chatAction = e.getActionMasked();
+            if (chatAction == MotionEvent.ACTION_CANCEL) releaseAll();
+            else if (chatAction == MotionEvent.ACTION_DOWN || chatAction == MotionEvent.ACTION_MOVE || chatAction == MotionEvent.ACTION_UP)
+                menuMouse(e.getX(), e.getY(), chatAction);
+            return true;
+        }
         if (settings.overlayDisabled && !editing) {
             int a = e.getActionMasked();
             if (menus) menuMouse(e.getX(), e.getY(), a);

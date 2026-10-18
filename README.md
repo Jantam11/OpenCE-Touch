@@ -10,6 +10,10 @@
 Get the Android touch version from this fork's [Releases](https://github.com/Jantam11/OpenCE-Touch/releases)
 ([latest APK](https://github.com/Jantam11/OpenCE-Touch/releases/latest/download/OpenCE-Touch.apk)).
 
+## 0.6.1-touch update
+
+Private multiplayer games gain text chat and a touchscreen keyboard (D-pad Up), with optional streamer filters. Public server-browser games keep chat off. Compatible resource packs can replace models, and map sharing is faster. Linear audio interpolation is corrected; the existing choice is under **Audio Setup → Sound Processing**. Credit: OpenCE contributors and WhiteI3ulL for the updated resampler. Multiplayer remains **protocol 29**; MCC remains deferred.
+
 ## 0.6.0-touch additions
 
 Settings survive app restarts and old duplicated configuration sections are repaired. **OPTIONS → General settings → Edit in-game HUD** moves the weapons, health and radar panels; Save and Android Back keep the layout. Touch layout imports/exports leave the HUD layout alone.
@@ -112,8 +116,8 @@ storage for the site; nothing is uploaded. Refer to
 ## Mods
 
 Mods are folders of Halo PC tag files, as the Halo Editing Kit and Invader
-write them, in `mods/` next to `maps/`: texture, sound and text packs that
-play over the maps' on your machine only, in any game. Each has a
+write them, in `mods/` next to `maps/`: texture, sound, text and model packs
+that play over the maps' on your machine only, in any game. Each has a
 `mod.toml`. Every mod in the folder is on; the main menu's Mods turns them
 off and on and sets the order they load in.
 Refer to [docs/mods.md](docs/mods.md).
