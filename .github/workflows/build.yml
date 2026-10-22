@@ -236,7 +236,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: v0.6.2-touch
+          TAG: v0.6.3-touch
         run: python3 tools/publish_touch_release.py
 
   windows:

@@ -10,14 +10,16 @@
 Get the Android touch version from this fork's [Releases](https://github.com/Jantam11/OpenCE-Touch/releases)
 ([latest APK](https://github.com/Jantam11/OpenCE-Touch/releases/latest/download/OpenCE-Touch.apk)).
 
-## In development: screen-region controls
+## 0.6.3-touch: experimental screen-region controls
 
-An optional **OPTIONS → Control system → Xash-style screen regions** mode lets
+The experimental **OPTIONS → Control system → Xash-style screen regions** mode lets
 you start movement anywhere on the left and swipe to look on the right. Adjust
 the divider, swap the movement side and change travel distance in **Region
 settings**. Existing action buttons stay editable. **OpenCE-Touch pads
 (original)** restores the previous control system and its saved pads; it remains
-the default. This source change is not included in the 0.6.2 release APK.
+the default. Credit to the [Xash3D-FWGS team](https://github.com/FWGS/xash3d-fwgs)
+for the movement/look region behaviour. Android build/regression checks pass;
+phone gameplay testing is still needed.
 
 ## 0.6.2-touch update
 

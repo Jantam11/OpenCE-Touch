@@ -1,10 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.6.3-touch — 2026-10-22
 
-- Added optional Xash-style screen regions: floating movement, swipe look, an adjustable divider and movement side/travel settings. Original pads remain the default, and editable buttons, menu taps and layouts remain available.
+- Added an **experimental Xash-style touch control system** with adjustable movement/look screen regions. Enable it in **OPTIONS → Control system → Xash-style screen regions**.
+- Original controls remain the default; existing buttons and layouts are preserved. Android builds and regression checks pass; phone gameplay testing is still needed. Multiplayer remains **protocol 32**.
 
-**Credit:** [FWGS / mittorn — Xash3D-FWGS](https://github.com/FWGS/xash3d-fwgs) for the movement/look region behaviour.
+**Credit:** [Xash3D-FWGS team](https://github.com/FWGS/xash3d-fwgs) for the movement/look region behaviour.
 
 ## 0.6.2-touch — 2026-10-22
 

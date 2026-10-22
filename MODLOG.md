@@ -1,5 +1,16 @@
 # OpenCE-Touch maintenance — 2026-10-09
 
+## 2026-10-22 — 0.6.3 release request
+
+User explicitly requested publishing a 0.6.3 APK, a short experimental
+Xash-style controls changelog and minor Xash3D-FWGS team credit. Bump version
+to 0.6.3-touch / Android code 14; tag v0.6.3-touch. Publish only after this exact
+revision passes Android debug/release and regressions. Use Build's direct
+publisher, never the legacy artifact-based Touch release workflow: account
+Actions artifact storage remains full. Include APK, licensed ZIP and checksums.
+Phone gameplay remains unverified; original pads remain default. Prior feature
+code d1782a5a passed Android CI 39786139012; release CI is a separate gate.
+
 ## 2026-10-22 — optional Xash-style screen regions
 
 User requested inspection and an alternative movement/look system; keep the

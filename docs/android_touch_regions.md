@@ -62,8 +62,8 @@ divider/travel values are rejected before an imported layout is applied.
   compatibility with old/foreign files and invalid-value rejection, alongside
   the existing Java and native mobile checks.
 - Android CI runs these before debug/release APK compilation. On
-  `touch-controls`, it skips Actions artifact storage. This is an unreleased
-  feature commit; it does not publish a release or replace the latest APK.
+  `touch-controls`, it skips Actions artifact storage. Release commits publish
+  the checked APK and licensed package directly from the runner.
 
 Local deterministic tests and Android compilation do not establish phone
 gameplay. No phone or owned Halo game data is connected in this session.
@@ -73,7 +73,9 @@ passed on source commit `d1782a5a01af95faddde7d41fad9838f5454cf5e`:
 debug and release APK compilation, full touch/mobile/JNI regressions, 32-bit
 chat/filter/mixer checks, and the final layout/gyro/HUD/region tests. Desktop
 and web jobs, both artifact uploads and release publication were skipped.
-The published 0.6.2 APK does not yet contain this feature.
+The feature is included as an experimental option in 0.6.3-touch. The original
+0.6.2 APK does not contain it. The 0.6.3 release commit must independently pass
+the Android build/test gate before publication.
 
 ## Phone acceptance checks
 
