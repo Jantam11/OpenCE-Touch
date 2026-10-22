@@ -1,3 +1,19 @@
+# 2026-10-22 — optional Xash-style screen regions
+
+Source `d1782a5a` adds a selectable movement/look alternative after 0.6.2;
+original pads remain the default. Adapted the floating `_move` / relative `_look`
+behaviour examined in FWGS/xash3d-fwgs `d6b54aaf`, with FWGS/mittorn attribution,
+while retaining this fork's SDL virtual controller, editable buttons,
+gyro/fire-drag, direct menu/profile/chat taps and portable layouts. Divider,
+movement side and per-axis travel persist and round-trip with layouts.
+
+[Android CI 39786139012](https://github.com/Jantam11/OpenCE-Touch/actions/runs/39786139012)
+passed debug/release APK builds, full mobile/JNI and new production-event-router
+regressions, 32-bit chat/filter/mixer checks and layout/gyro/HUD/region checks.
+Desktop/web jobs, artifact uploads and release publication were skipped. No
+phone gameplay or control-feel validation is claimed. 0.6.2 stays the published
+APK. [Implementation scope and phone checks](docs/android_touch_regions.md).
+
 # Update 2026-10-12: 0.5.5-touch
 
 Merged all 54 new upstream commits through `86be005a` (build-190), retaining both parents. Upstream run 38172922506 passed Linux, Windows and Android debug/release jobs before selection. This fork builds Android only; web sources/history are retained but its web CI is skipped on touch-controls.

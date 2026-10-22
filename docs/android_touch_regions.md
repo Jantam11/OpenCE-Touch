@@ -68,6 +68,13 @@ divider/travel values are rejected before an imported layout is applied.
 Local deterministic tests and Android compilation do not establish phone
 gameplay. No phone or owned Halo game data is connected in this session.
 
+[Android CI 39786139012](https://github.com/Jantam11/OpenCE-Touch/actions/runs/39786139012)
+passed on source commit `d1782a5a01af95faddde7d41fad9838f5454cf5e`:
+debug and release APK compilation, full touch/mobile/JNI regressions, 32-bit
+chat/filter/mixer checks, and the final layout/gyro/HUD/region tests. Desktop
+and web jobs, both artifact uploads and release publication were skipped.
+The published 0.6.2 APK does not yet contain this feature.
+
 ## Phone acceptance checks
 
 1. Keep original pads selected after upgrading; confirm movement, aiming,

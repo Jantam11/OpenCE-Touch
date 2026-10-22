@@ -18,11 +18,15 @@ touch/controller/profile-coordinate, camera, chat, renderer/Quit/themes,
 display-option and per-tick input checks passed locally. Local JRE compiler
 and official OpenJDK JNI headers were used without installing an SDK.
 
-Full Android APK CI is still required; no phone, game data or full SDK/NDK is
-available locally. This is source development, not a new release: do not tag or
-replace 0.6.2. Run Android-only CI on touch-controls, preserving skipped Actions
-artifact uploads because account storage is full. See docs/android_touch_regions.md
-for source attribution, scope, compatibility and exact phone acceptance checks.
+Android CI 39786139012 passed on d1782a5a: debug/release APK compilation,
+touch/mobile/JNI, 32-bit chat/filter/mixer and final layout/gyro/HUD/region checks.
+Both artifact upload steps and release publication were skipped. Local keyboard
+ASan/UBSan checks also passed with leak detection disabled for this host's /proc
+restriction; six menu/config pytest checks passed. No phone or game data is
+connected, so gameplay remains unverified. This is an unreleased source feature;
+0.6.2 remains the published APK. Keep future validation Android-only and skip
+Actions artifact storage. See docs/android_touch_regions.md for source
+attribution, scope, compatibility and exact phone acceptance checks.
 
 Work starts at 5a9c7892 on touch-controls. Chosen route: merge validated upstream f479e349 with both parents, adapt narrowly selected credited-fork fixes, validate on an isolated CI branch, then advance touch-controls and publish its Android artifacts. Existing release v0.5.1-touch is the rollback point. No game files or signing keys are accessed.
 
