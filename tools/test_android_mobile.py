@@ -37,6 +37,18 @@ public class MobileCheck {
   rejects(saved.replace("version=1","version=9"));
   rejects(saved.replace("gyroscope=true","gyroscope=maybe"));
   rejects("x".repeat(65537));
+  // Existing exports keep pads; the alternative and its tuning round-trip.
+  require(!d.screenRegions && !d.moveRight && d.regionSplit==.5f && d.sideZone==.06f && d.forwardZone==.06f);
+  c.screenRegions=true;c.moveRight=true;c.regionSplit=.35f;c.sideZone=.1f;c.forwardZone=.12f;
+  String regionSaved=c.encode();TouchConfiguration regions=TouchConfiguration.decode(regionSaved);
+  require(regions.screenRegions&&regions.moveRight&&regions.regionSplit==.35f&&regions.sideZone==.1f&&regions.forwardZone==.12f);
+  rejects(regionSaved.replace("region-split=0.35","region-split=NaN"));
+  rejects(regionSaved.replace("region-split=0.35","region-split=0.1"));
+  rejects(regionSaved.replace("region-side-zone=0.1","region-side-zone=0"));
+  rejects(regionSaved.replace("region-forward-zone=0.12","region-forward-zone=0.31"));
+  rejects(regionSaved.replace("screen-regions=true","screen-regions=maybe"));
+  String legacy=saved.replaceAll("(?m)^(screen-regions|region-[^=]+)=[^\\r\\n]*[\\r\\n]+", "");
+  require(!TouchConfiguration.decode(legacy).screenRegions);
   TouchConfiguration imported=TouchConfiguration.decode("format=halo-touch-layout\nversion=4\ncount=3\ncontrol.0.type=16\ncontrol.0.x=480\ncontrol.0.y=270\ncontrol.1.type=17\ncontrol.1.x=960\ncontrol.1.y=540\ncontrol.2.type=18\n");
   require(imported.buttons.get(0).kind==1&&imported.buttons.get(0).x==.5f&&imported.buttons.get(1).action==1016&&imported.buttons.get(2).action==2000);
   require(imported.buttons.size()==4&&imported.buttons.get(3).kind==2);

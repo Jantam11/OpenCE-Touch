@@ -146,6 +146,22 @@ resized, labelled and assigned actions. The optional **fqlx compact** preset
 uses the same editor and portable `.halolayout` import/export format.
 Upgrading keeps existing layouts in `touch_controls_v3` preferences.
 
+**OPTIONS → Control system → Xash-style screen regions** enables an alternative
+to the circular pads. Touch empty space on the movement side to set a floating
+movement origin; displacement controls speed. Swipe the other side to look.
+The divider starts at 50% of screen width with movement on the left. **Region
+settings** adjusts the divider (20–80%), movement side, and horizontal/vertical
+travel to full speed (2–30% of screen width/height, initially 6%). A faint divider
+and movement indicator show the active regions. Buttons take priority, and
+crossing a boundary keeps the finger's original role until release.
+
+The mode applies during gameplay. Menus/profile/chat retain direct taps and
+their PAD option. **EDIT** still edits the original buttons and pads. Switching
+back to **OpenCE-Touch pads (original)** restores those pads; no controls are
+deleted. The mode and tuning persist across restarts and `.halolayout`
+export/import. Older files and layouts from other forks use the original pads.
+See [source notes and phone checks](../../docs/android_touch_regions.md).
+
 Swipe aiming and optional gyroscope aiming feed SDL mouse motion; mouse
 sensitivity and `input.mouse_aim_assist` therefore apply. Controller button
 and stick presets still affect the virtual gamepad. Gyro and rumble are

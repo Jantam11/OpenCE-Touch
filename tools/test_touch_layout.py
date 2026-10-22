@@ -12,6 +12,8 @@ subprocess.run([
     str(root / "port/android/app/src/main/java/com/halo/decomp/GyroscopeAim.java"),
     str(root / "tools/tests/GyroscopeAimTest.java"),
     str(root / "port/android/app/src/main/java/com/halo/decomp/HudLayout.java"),
+    str(root / "port/android/app/src/main/java/com/halo/decomp/TouchRegions.java"),
+    str(root / "tools/tests/TouchRegionsTest.java"),
     str(root / "tools/tests/HudLayoutTest.java"),
     str(root / "tools/tests/TouchLayoutTest.java")
 ], check=True)
@@ -19,3 +21,4 @@ subprocess.run(["java", "-cp", str(classes), "com.halo.decomp.TouchLayoutTest"],
 subprocess.run(["java", "-cp", str(classes), "com.halo.decomp.GyroscopeAimTest"], check=True)
 
 subprocess.run(["java", "-cp", str(classes), "com.halo.decomp.HudLayoutTest"], check=True)
+subprocess.run(["java", "-cp", str(classes), "com.halo.decomp.TouchRegionsTest"], check=True)

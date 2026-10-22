@@ -49,7 +49,7 @@ public final class TouchControls extends View implements android.hardware.Sensor
     }
     private static final class Finger {
         Control control;
-        int action;
+        int action, region;
         float downX, downY, lastX, lastY, startX, startY;
         boolean dragged, menu;
     }
@@ -59,6 +59,7 @@ public final class TouchControls extends View implements android.hardware.Sensor
     private final ArrayList<Control> controls = new ArrayList<>();
     private final Map<Integer, Finger> fingers = new HashMap<>();
     private final Map<Integer, Integer> held = new HashMap<>();
+    private final TouchRegions regions = new TouchRegions();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF editRect = new RectF(), menuRect = new RectF(), optionsRect = new RectF();
     // HUD panels adapted from FulGerNet/halo-ce-android db04b1d4.
@@ -241,7 +242,9 @@ public final class TouchControls extends View implements android.hardware.Sensor
         }
         if (settings.overlayDisabled && !editing) return;
         if (!menuTouch || editing) {
+            if (useRegions()) drawRegions(canvas);
             for (Control c : controls) {
+                if (useRegions() && c.kind != BUTTON) continue;
                 float x = c.x * getWidth(), y = c.y * getHeight(), r = radius(c);
                 paint.setStyle(Paint.Style.FILL);
                 paint.setColor(c.pressed > 0 ? 0xFF3E98B5 : 0xFF203342);
@@ -302,10 +305,32 @@ public final class TouchControls extends View implements android.hardware.Sensor
         for (int pass = 0; pass < 2; pass++)
             for (int i = controls.size()-1; i >= 0; i--) {
                 Control c = controls.get(i);
+                if (useRegions() && c.kind != BUTTON) continue;
                 if ((c.kind == BUTTON) != (pass == 0)) continue;
                 if (Math.hypot(x-c.x*getWidth(), y-c.y*getHeight()) <= radius(c)) return c;
             }
         return null;
+    }
+
+    private boolean useRegions() {
+        return settings.screenRegions && !menus && !menuTouch && !editing;
+    }
+    private void drawRegions(Canvas canvas) {
+        float split = settings.regionSplit * getWidth(), top = editRect.bottom + dp(28);
+        paint.setStyle(Paint.Style.STROKE); paint.setStrokeWidth(dp(1));
+        paint.setColor(Color.WHITE); paint.setAlpha(45);
+        canvas.drawLine(split, top, split, getHeight(), paint);
+        paint.setStyle(Paint.Style.FILL); paint.setAlpha(110); paint.setTextSize(dp(12));
+        paint.setTextAlign(Paint.Align.CENTER);
+        canvas.drawText(settings.moveRight ? "LOOK" : "MOVE", split / 2, top, paint);
+        canvas.drawText(settings.moveRight ? "MOVE" : "LOOK", (split + getWidth()) / 2, top, paint);
+        for (Finger f : fingers.values()) if (f.region == TouchRegions.MOVE) {
+            float rx = settings.sideZone * getWidth(), ry = settings.forwardZone * getHeight();
+            paint.setStyle(Paint.Style.STROKE); paint.setAlpha(100);
+            canvas.drawOval(f.downX-rx, f.downY-ry, f.downX+rx, f.downY+ry, paint);
+            paint.setStyle(Paint.Style.FILL); paint.setAlpha(140);
+            canvas.drawCircle(f.downX+regions.moveX*rx, f.downY+regions.moveY*ry, dp(8), paint);
+        }
     }
 
     @Override public boolean onTouchEvent(MotionEvent e) {
@@ -334,18 +359,20 @@ public final class TouchControls extends View implements android.hardware.Sensor
             }
             if (toolbarPointer >= 0) return true;
             Control c = editing || !menuTouch ? hit(x,y) : null;
-            if (c == null && (!menuTouch || editing)) return true;
+            int region = c == null && useRegions() ? regions.down(id, x, y, getWidth(), getHeight(),
+                settings.regionSplit, settings.moveRight) : TouchRegions.NONE;
+            if (c == null && region == TouchRegions.NONE && (!menuTouch || editing)) return true;
             // Each stick has one owner; additional fingers cannot steal it.
             for (Finger other : fingers.values())
                 if (editing || menuTouch || (c != null && c.kind != BUTTON && other.control == c)) return true;
-            Finger f = new Finger(); f.control = c;
+            Finger f = new Finger(); f.control = c; f.region = region;
             f.downX = f.lastX = x; f.downY = f.lastY = y;
             if (c != null) { f.startX = c.x; f.startY = c.y; f.action = c.action; c.pressed++; }
             f.menu = menuTouch && !editing;
             fingers.put(id, f);
             if (!editing) {
                 if (f.menu) menuMouse(x, y, MotionEvent.ACTION_DOWN);
-                else if (c.kind == BUTTON) hold(f.action,true);
+                else if (c != null && c.kind == BUTTON) hold(f.action,true);
             }
         } else if (action == MotionEvent.ACTION_MOVE) {
             for (int i = 0; i < e.getPointerCount(); i++) {
@@ -359,6 +386,11 @@ public final class TouchControls extends View implements android.hardware.Sensor
                         f.control.y = f.startY + (y-f.downY)/getHeight(); bound(f.control);
                     }
                 } else if (f.menu) menuMouse(x, y, MotionEvent.ACTION_MOVE);
+                else if (f.region != TouchRegions.NONE) {
+                    int role = regions.motion(e.getPointerId(i), x, y, getWidth(), getHeight(), settings.sideZone, settings.forwardZone);
+                    if (role == TouchRegions.MOVE) TouchInput.move(regions.moveX, regions.moveY);
+                    else if (role == TouchRegions.LOOK) mouseMove(regions.lookX*sensitivity, regions.lookY*sensitivity, true);
+                }
                 else if (f.control.kind == AIM || f.control.kind == BUTTON && f.action == PAD+16)
                     mouseMove(dx*sensitivity,dy*sensitivity,true);
                 else if (f.control.kind == MOVE) {
@@ -391,6 +423,9 @@ public final class TouchControls extends View implements android.hardware.Sensor
                     if (f.control != null) f.control.pressed = Math.max(0,f.control.pressed-1);
                     if (editing) { save(); if (!f.dragged) editControl(f.control); }
                     else if (f.menu) menuMouse(e.getX(index), e.getY(index), MotionEvent.ACTION_UP);
+                    else if (f.region != TouchRegions.NONE) {
+                        if (regions.up(id) == TouchRegions.MOVE) TouchInput.move(0,0);
+                    }
                     else if (f.control.kind == BUTTON) hold(f.action,false);
                     else if (f.control.kind == MOVE) TouchInput.move(0,0);
                 }
@@ -423,6 +458,7 @@ public final class TouchControls extends View implements android.hardware.Sensor
     }
     public void releaseAll() {
         TouchInput.reset();
+        regions.reset();
         gyroAim.reset();
         nativeLookReset();
         held.clear();
@@ -468,7 +504,7 @@ public final class TouchControls extends View implements android.hardware.Sensor
     }
     public void options() {
         releaseAll();
-        String[] choices = {"Aim sensitivity", "Add button", "Reset layout", "Help", "General settings", "Export layout", "Import layout", "Single-player cheats", "Import disc movies", "Camera mode", "Layout presets"};
+        String[] choices = {"Aim sensitivity", "Add button", "Reset layout", "Help", "General settings", "Export layout", "Import layout", "Single-player cheats", "Import disc movies", "Camera mode", "Layout presets", "Control system"};
         new AlertDialog.Builder(activity).setTitle("Touch controls").setItems(choices,(d,which)->{
             if (which == 0) {
                 LinearLayout layout = dialogLayout();
@@ -497,7 +533,59 @@ public final class TouchControls extends View implements android.hardware.Sensor
                 intent.putExtra("import-movies", true); activity.startActivity(intent);
             } else if (which == 9) nativeCameraMode();
             else if (which == 10) layoutPresets();
+            else if (which == 11) controlSystem();
         }).show();
+    }
+    private void controlSystem() {
+        releaseAll();
+        new AlertDialog.Builder(activity).setTitle("Control system")
+            .setSingleChoiceItems(new String[]{"OpenCE-Touch pads (original)", "Xash-style screen regions"},
+                settings.screenRegions ? 1 : 0, (dialog, selected) -> {
+                    releaseAll(); settings.screenRegions = selected == 1;
+                    saveFeatures(); dialog.dismiss();
+                    if (settings.screenRegions) regionSettings();
+                })
+            .setNeutralButton("Region settings", (dialog, which) -> regionSettings())
+            .setNegativeButton("Close", null).show();
+    }
+    private void regionSettings() {
+        releaseAll();
+        LinearLayout layout = dialogLayout();
+        TextView explanation = new TextView(activity);
+        explanation.setText("Touch empty space to move or look. Buttons take priority. Each finger keeps its role until lifted. EDIT still edits your original pads and buttons.");
+        layout.addView(explanation);
+        Spinner side = new Spinner(activity);
+        side.setAdapter(new ArrayAdapter<>(activity, android.R.layout.simple_spinner_dropdown_item,
+            new String[]{"Move left / look right", "Look left / move right"}));
+        side.setSelection(settings.moveRight ? 1 : 0); layout.addView(side);
+        SeekBar split = regionSlider(layout, "Divider (% of screen width)", 60, Math.round(settings.regionSplit*100)-20, 20);
+        SeekBar horizontal = regionSlider(layout, "Horizontal travel (% of screen width)", 28, Math.round(settings.sideZone*100)-2, 2);
+        SeekBar vertical = regionSlider(layout, "Vertical travel (% of screen height)", 28, Math.round(settings.forwardZone*100)-2, 2);
+        android.widget.ScrollView scroll = new android.widget.ScrollView(activity); scroll.addView(layout);
+        new AlertDialog.Builder(activity).setTitle("Screen regions").setView(scroll)
+            .setPositiveButton("Save", (dialog, which) -> {
+                releaseAll(); settings.moveRight = side.getSelectedItemPosition() == 1;
+                settings.regionSplit = (split.getProgress()+20)/100f;
+                settings.sideZone = (horizontal.getProgress()+2)/100f;
+                settings.forwardZone = (vertical.getProgress()+2)/100f;
+                saveFeatures();
+            }).setNeutralButton("Defaults", (dialog, which) -> {
+                releaseAll(); settings.moveRight = false; settings.regionSplit = .5f;
+                settings.sideZone = settings.forwardZone = .06f; saveFeatures(); regionSettings();
+            }).setNegativeButton("Cancel", null).show();
+    }
+    private SeekBar regionSlider(LinearLayout layout, String name, int max, int progress, int minimum) {
+        SeekBar slider = slider(layout, name, max, progress);
+        TextView value = new TextView(activity); layout.addView(value);
+        value.setText(name + ": " + (slider.getProgress()+minimum) + "%");
+        slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+                value.setText(name + ": " + (progress+minimum) + "%");
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar) {}
+            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        });
+        return slider;
     }
     private void layoutPresets() {
         new AlertDialog.Builder(activity).setTitle("Layout presets")
@@ -544,6 +632,11 @@ public final class TouchControls extends View implements android.hardware.Sensor
         settings.gyro = prefs.getBoolean("gyro", false); settings.rumble = prefs.getBoolean("rumble", true);
         settings.fps = prefs.getBoolean("fps", false); settings.icons = prefs.getBoolean("icons", true);
         settings.overlayDisabled = prefs.getBoolean("overlay-disabled", false);
+        settings.screenRegions = prefs.getBoolean("screen-regions", false);
+        settings.moveRight = prefs.getBoolean("region-move-right", false);
+        settings.regionSplit = regionPreference("region-split", .5f, .2f, .8f);
+        settings.sideZone = regionPreference("region-side-zone", .06f, .02f, .3f);
+        settings.forwardZone = regionPreference("region-forward-zone", .06f, .02f, .3f);
         settings.gyroSensitivity = prefs.getFloat("gyro-sensitivity", 1f);
         if (!Float.isFinite(settings.gyroSensitivity) || settings.gyroSensitivity < .25f || settings.gyroSensitivity > 4f) settings.gyroSensitivity = 1f;
         settings.fov = prefs.getFloat("fov", 70f);
@@ -558,10 +651,17 @@ public final class TouchControls extends View implements android.hardware.Sensor
         // Native Halo menus expose Porting options; Android dialogs provide the settings pages.
         nativeMenuPublish(1, 0, false, "Porting options", new String[0], new int[0], new int[0]);
     }
+    private float regionPreference(String key, float fallback, float low, float high) {
+        float value = prefs.getFloat(key, fallback);
+        return Float.isFinite(value) && value >= low && value <= high ? value : fallback;
+    }
     private void saveFeatures() {
         prefs.edit().putBoolean("gyro", settings.gyro).putBoolean("rumble", settings.rumble)
             .putBoolean("fps",settings.fps).putBoolean("icons",settings.icons)
             .putBoolean("overlay-disabled",settings.overlayDisabled)
+            .putBoolean("screen-regions",settings.screenRegions).putBoolean("region-move-right",settings.moveRight)
+            .putFloat("region-split",settings.regionSplit).putFloat("region-side-zone",settings.sideZone)
+            .putFloat("region-forward-zone",settings.forwardZone)
             .putFloat("gyro-sensitivity",settings.gyroSensitivity).putFloat("fov",settings.fov).apply();
         nativeFieldOfView(settings.fov); updateSensors(); invalidate();
     }
@@ -711,6 +811,8 @@ public final class TouchControls extends View implements android.hardware.Sensor
         releaseAll(); controls.clear(); controls.addAll(next); sensitivity=c.sensitivity;
         settings.gyro=c.gyro;settings.gyroSensitivity=c.gyroSensitivity;settings.rumble=c.rumble;settings.fps=c.fps;settings.fov=c.fov;
         settings.icons=c.icons;settings.overlayDisabled=c.overlayDisabled;
+        settings.screenRegions=c.screenRegions;settings.moveRight=c.moveRight;settings.regionSplit=c.regionSplit;
+        settings.sideZone=c.sideZone;settings.forwardZone=c.forwardZone;
         for(Control control:controls)bound(control); save();saveFeatures();
     }
 }

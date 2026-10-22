@@ -1,5 +1,29 @@
 # OpenCE-Touch maintenance — 2026-10-09
 
+## 2026-10-22 — optional Xash-style screen regions
+
+User requested inspection and an alternative movement/look system; keep the
+existing controls. Started from remote touch-controls c2e23836 (0.6.2).
+Examined FWGS/xash3d-fwgs d6b54aaf6c1d8518e08404a842f3f6ee02cef3cc,
+engine/client/input/in_touch.c. Chosen route: implement its floating _move and
+relative _look behaviour in Java, preserving this fork's SDL virtual pad,
+relative mouse, gyro, editable buttons, menu/profile/chat input and classic pads.
+
+Original pads remain default. OPTIONS → Control system enables screen regions;
+divider/handedness/axis travel are configurable and persist/export with layouts.
+The new TouchRegions class and actual TouchControls event router pass synthetic
+multi-finger/ownership/crossing/cancel/menu/chat/editor regression checks.
+Java layout/gyro/HUD, old/foreign/new layout import, native mobile/JNI, existing
+touch/controller/profile-coordinate, camera, chat, renderer/Quit/themes,
+display-option and per-tick input checks passed locally. Local JRE compiler
+and official OpenJDK JNI headers were used without installing an SDK.
+
+Full Android APK CI is still required; no phone, game data or full SDK/NDK is
+available locally. This is source development, not a new release: do not tag or
+replace 0.6.2. Run Android-only CI on touch-controls, preserving skipped Actions
+artifact uploads because account storage is full. See docs/android_touch_regions.md
+for source attribution, scope, compatibility and exact phone acceptance checks.
+
 Work starts at 5a9c7892 on touch-controls. Chosen route: merge validated upstream f479e349 with both parents, adapt narrowly selected credited-fork fixes, validate on an isolated CI branch, then advance touch-controls and publish its Android artifacts. Existing release v0.5.1-touch is the rollback point. No game files or signing keys are accessed.
 
 See INTEGRATION_NOTES.md for revisions, conflict decisions and local checks. GitHub CI is required for full builds and 32-bit regression execution. Compilation is separate from phone gameplay verification.

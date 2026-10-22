@@ -10,6 +10,15 @@
 Get the Android touch version from this fork's [Releases](https://github.com/Jantam11/OpenCE-Touch/releases)
 ([latest APK](https://github.com/Jantam11/OpenCE-Touch/releases/latest/download/OpenCE-Touch.apk)).
 
+## In development: screen-region controls
+
+An optional **OPTIONS → Control system → Xash-style screen regions** mode lets
+you start movement anywhere on the left and swipe to look on the right. Adjust
+the divider, swap the movement side and change travel distance in **Region
+settings**. Existing action buttons stay editable. **OpenCE-Touch pads
+(original)** restores the previous control system and its saved pads; it remains
+the default. This source change is not included in the 0.6.2 release APK.
+
 ## 0.6.2-touch update
 
 OpenCE is merged through `fc22e846`, with rendering optimizations, co-op repairs, multilingual disc import and new display settings. Multiplayer uses **protocol 32**. ChupathingyCE/MrMilenko's rapid-tap fix keeps short fire presses separate at high frame rates. Editable Android controls, movie import, themes and existing credits are retained. MCC remains deferred. Android CI uploads release files directly after debug/release builds and regressions, without Actions artifact storage.
@@ -28,6 +37,7 @@ New adaptations credit [ChupathingyCE/MrMilenko](https://github.com/ChupathingyC
 
 ## Mobile feature credits
 
+- [FWGS / mittorn — Xash3D-FWGS](https://github.com/FWGS/xash3d-fwgs): the optional screen-region mode follows its floating `_move` / swipe `_look` behaviour, adapted to OpenCE's SDL input. [Scope and validation](docs/android_touch_regions.md).
 - [theLlamaNet / FulGer — halo-ce-android](https://github.com/theLlamaNet/halo-ce-android): gyroscope aiming, rumble, fire-button drag aiming, Halo-style vector icons, portable layouts, Porting options, FOV/FPS settings, single-player cheats, free camera and encrypted relay fallback. Adapted to retain this fork's SDL virtual gamepad and working menu/profile-keyboard taps.
 - [JoshRob297 — halo-ce-touch](https://github.com/JoshRob297/halo-ce-touch): Bink movie playback from [his clean Bink branch](https://github.com/JoshRob297/halo-ce-touch/tree/bink-on-main), plus dedicated-server map/variant rotation, time limits and restart/join fixes. His touch work also builds on theLlamaNet's controls.
 - [FFmpeg](https://ffmpeg.org/): open-source Bink video/audio decoding, built from pinned LGPL source. Every Android release includes its license, exact source and relinking materials in the packaged build.

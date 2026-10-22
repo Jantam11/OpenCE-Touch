@@ -16,6 +16,8 @@ final class TouchConfiguration {
     final ArrayList<Button> buttons = new ArrayList<>();
     float sensitivity = 1.8f, gyroSensitivity = 1f, fov = 70f;
     boolean gyro, rumble = true, fps, icons = true, overlayDisabled;
+    boolean screenRegions, moveRight;
+    float regionSplit = .5f, sideZone = .06f, forwardZone = .06f;
 
     /** fqlx's compact web layout, adapted to our native SDL virtual gamepad. */
     static TouchConfiguration compactLayout() {
@@ -66,6 +68,11 @@ final class TouchConfiguration {
         p.setProperty("gyroscope", Boolean.toString(gyro)); p.setProperty("rumble", Boolean.toString(rumble));
         p.setProperty("fps-counter", Boolean.toString(fps)); p.setProperty("icons", Boolean.toString(icons));
         p.setProperty("overlay-disabled", Boolean.toString(overlayDisabled));
+        p.setProperty("screen-regions", Boolean.toString(screenRegions));
+        p.setProperty("region-move-right", Boolean.toString(moveRight));
+        p.setProperty("region-split", Float.toString(regionSplit));
+        p.setProperty("region-side-zone", Float.toString(sideZone));
+        p.setProperty("region-forward-zone", Float.toString(forwardZone));
         for (int i = 0; i < buttons.size(); i++) {
             Button b = buttons.get(i); String k = "control." + i + ".";
             p.setProperty(k+"id", b.id); p.setProperty(k+"label", b.label);
@@ -94,6 +101,14 @@ final class TouchConfiguration {
         c.gyro = bool(p,"gyroscope",false); c.rumble = bool(p,"rumble",true);
         c.fps = bool(p,"fps-counter",false); c.icons = bool(p,"icons",true);
         c.overlayDisabled = bool(p,"overlay-disabled",false);
+        // Foreign/older layouts retain the original pad behaviour.
+        if (!llama) {
+            c.screenRegions = bool(p,"screen-regions",false);
+            c.moveRight = bool(p,"region-move-right",false);
+            c.regionSplit = number(p,"region-split",.5f,.2f,.8f);
+            c.sideZone = number(p,"region-side-zone",.06f,.02f,.3f);
+            c.forwardZone = number(p,"region-forward-zone",.06f,.02f,.3f);
+        }
         int[] actions = {1000,1001,1002,1003,1016,1015,1007,1008,1009,1010,1006,1004,1011,1012,1013,1014,0,1016,2000};
         String[] labels = {"A","B","X","Y","FIRE","GRENADE","CROUCH","ZOOM","LIGHT","GREN TYPE","PAUSE","SCORE","UP","DOWN","LEFT","RIGHT","MOVE","FIRE","CAMERA"};
         java.util.HashSet<String> ids = new java.util.HashSet<>();

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Added optional Xash-style screen regions: floating movement, swipe look, an adjustable divider and movement side/travel settings. Original pads remain the default, and editable buttons, menu taps and layouts remain available.
+
+**Credit:** [FWGS / mittorn — Xash3D-FWGS](https://github.com/FWGS/xash3d-fwgs) for the movement/look region behaviour.
+
 ## 0.6.2-touch — 2026-10-22
 
 - Updated OpenCE with rendering optimizations, co-op elevator/gravity-lift fixes, Bumper Jumper controls and new display options. Multiplayer now uses **protocol 32**; older clients must update.

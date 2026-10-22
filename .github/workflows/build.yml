@@ -148,6 +148,7 @@ jobs:
           python3 tools/test_android_chat.py
           python3 tools/test_tick_input.py
           python3 tools/test_android_touch.py
+          python3 tools/test_touch_regions.py
           python3 tools/test_android_mobile.py
           python3 tools/test_android_render_quit.py
           python3 tools/test_camera_touch.py
