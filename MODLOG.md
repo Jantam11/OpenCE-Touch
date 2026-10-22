@@ -11,6 +11,15 @@ Actions artifact storage remains full. Include APK, licensed ZIP and checksums.
 Phone gameplay remains unverified; original pads remain default. Prior feature
 code d1782a5a passed Android CI 39786139012; release CI is a separate gate.
 
+Release completed: Android CI 39789651866 passed debug/release builds, full
+regression checks and direct publication for e4b244b1d1ded24fcf6a0b53f3bfe7d198893a10.
+v0.6.3-touch points to that exact commit and is the latest non-draft release.
+OpenCE-Touch.apk, halo-android-release.zip and SHA256SUMS.txt are all uploaded.
+APK SHA-256: c715133852073c49394898bdcdd0c957d97952273b90aee2af785c1f5870e18f.
+Both Actions artifact uploads were skipped. Release notes include experimental
+status, the Xash3D-FWGS team credit, unchanged defaults and the temporary-signing
+backup notice. Hardware gameplay remains unverified.
+
 ## 2026-10-22 — optional Xash-style screen regions
 
 User requested inspection and an alternative movement/look system; keep the

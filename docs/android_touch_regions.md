@@ -73,9 +73,13 @@ passed on source commit `d1782a5a01af95faddde7d41fad9838f5454cf5e`:
 debug and release APK compilation, full touch/mobile/JNI regressions, 32-bit
 chat/filter/mixer checks, and the final layout/gyro/HUD/region tests. Desktop
 and web jobs, both artifact uploads and release publication were skipped.
-The feature is included as an experimental option in 0.6.3-touch. The original
-0.6.2 APK does not contain it. The 0.6.3 release commit must independently pass
-the Android build/test gate before publication.
+The feature is included as an experimental option in
+[0.6.3-touch](https://github.com/Jantam11/OpenCE-Touch/releases/tag/v0.6.3-touch).
+[Release CI 39789651866](https://github.com/Jantam11/OpenCE-Touch/actions/runs/39789651866)
+passed the Android debug/release build/test gate and direct publication on
+`e4b244b1d1ded24fcf6a0b53f3bfe7d198893a10`. The APK, licensed ZIP and checksums
+were uploaded without Actions artifact storage. The original 0.6.2 APK does
+not contain this feature. Phone gameplay remains unverified.
 
 ## Phone acceptance checks
 
