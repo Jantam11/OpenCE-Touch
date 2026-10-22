@@ -269,10 +269,14 @@ typedef int boolean;
 #define FALSE 0
 #define TRUE 1
 #define MAXIMUM_NETWORK_MACHINE_COUNT 4
+#define MAXIMUM_NETWORK_PLAYER_COUNT 4
+#define NONE (-1)
+struct network_player { int valid, machine_index; };
+static int network_player_is_valid(struct network_player *p) { return p->valid; }
 #define _network_game_server_state_pregame 0
 struct network_game_server_client_machine { int joined; };
 struct network_game_server {
- struct { long player_count, minimum_players; } game;
+ struct { long player_count, minimum_players; struct network_player players[4]; } game;
  struct { int paused; } countdown_state;
  struct network_game_server_client_machine client_machines[4];
  int state;
@@ -290,6 +294,7 @@ int main(void) {
  s.game.minimum_players = 2;
  assert(!server_ok_to_countdown(&s));
  s.client_machines[0].joined = 1; s.game.player_count = 1; needs_teams = 1;
+ s.game.players[0].valid = 1;
  assert(server_ok_to_countdown(&s)); /* upstream permits a solo host */
  assert(!network_game_server_port_force_start(&s) && !starts);
  precached = 1;
@@ -298,6 +303,9 @@ int main(void) {
  assert(server_ok_to_countdown(&s)); /* joining/leaving machines no longer reset the lobby */
  assert(network_game_server_port_force_start(&s) && starts == 2);
  players_on_each = 1; s.game.player_count = 2;
+ s.game.players[1].valid = 1;
+ assert(server_ok_to_countdown(&s)); /* split screen on the host also starts */
+ s.game.players[1].machine_index = 1;
  assert(!server_ok_to_countdown(&s)); /* multiple players still need teams */
  needs_teams = 0; s.game.minimum_players = 3;
  assert(!server_ok_to_countdown(&s));

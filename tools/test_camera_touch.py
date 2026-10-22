@@ -43,6 +43,7 @@ static struct{real dtime;}director_globals;
 static boolean director_camera_switch_fast;
 static int pending,look_calls,inhibited,facing_inhibited;
 static int simulate_consumption,look_pending;static real look_scale=1,player_yaw,player_pitch;
+int passenger_camera_enabled(short i){return FALSE;}
 void first_person_camera_update(void){}void following_camera_update(void){}void flying_camera_update(void){}
 struct director*director_get(short i){return &d;}
 int local_player_get_player_index(short i){return i;}

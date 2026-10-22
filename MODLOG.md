@@ -21,3 +21,7 @@ Reproduced the current release resetting high_res_hud=false to true after a fres
 ## 2026-10-17 — selected 0.6.0 integrations
 
 User approved upstream plus A/B/C/D/E/F/G and conditional J, commits and release with brief donor credits. Implemented selected features, optional display defaults and supported privacy controls; see INTEGRATION_NOTES for revisions and MCC deferral evidence. Local Java/JNI/HUD/settings/touch/camera/render/map checks pass after acquiring only official OpenJDK JNI headers and using the runtime compiler. Full Android CI debug/release is still mandatory. Prepare version 0.6.0-touch / Android code 11, publish only after CI. Existing workflow already gates publication on Android success.
+
+## 2026-10-22 update
+
+Prepared upstream fc22e846 merge (273 commits, upstream all-platform Build 39766822484 green), ChupathingyCE 4d0f50c8 rapid-tap adaptation and 0.6.2 release candidate. See INTEGRATION_NOTES.md for source review and validation. GitHub Actions artifact storage is full: direct upload from the checked Android job replaces artifact transfer on touch-controls. Never use the legacy artifact-based publisher for this candidate. Final release is conditional on Android CI; local JNI/toolchain and phone gameplay unavailable. Browser is signed out; workflow write access may require secure GitHub sign-in.

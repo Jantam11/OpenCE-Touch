@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.2-touch — 2026-10-22
+
+- Updated OpenCE with rendering optimizations, co-op elevator/gravity-lift fixes, Bumper Jumper controls and new display options. Multiplayer now uses **protocol 32**; older clients must update.
+- Improved disc import with multilingual map folders, safer file checks and the original loading picture, while retaining movie-only import and editable Android controls.
+- Fixed rapid fire taps being held together at high frame rates, adapted from ChupathingyCE. Android releases upload directly after checks, without Actions artifact storage.
+
+**Credits:** [OpenCE contributors](https://github.com/OpenCommunityEdition/OpenCE); [ChupathingyCE / MrMilenko](https://github.com/ChupathingyCE/chupathingyce) for the rapid-tap fix and regression. Earlier fork credits remain in the [README](README.md). MCC remains deferred.
+
+[Full comparison](https://github.com/Jantam11/OpenCE-Touch/compare/v0.6.1-touch...v0.6.2-touch)
+
 ## 0.6.1-touch — 2026-10-18
 
 - Updated OpenCE with multiplayer text chat, a tappable chat keyboard, player muting and optional streamer-mode filters. Public server-browser games keep text chat off; multiplayer remains **protocol 29**.

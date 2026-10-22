@@ -96,7 +96,7 @@ jobs:
 
       - name: Test
         run: |
-          python -m pytest -q tools/test_linux_port.py tools/test_android_asm_convert.py tools/test_host_watch_hash.py tools/test_touch_menu.py tools/harness tools/test_profile.py
+          python -m pytest -q tools/test_linux_port.py tools/test_android_asm_convert.py tools/test_host_watch_hash.py tools/test_touch_menu.py tools/harness tools/test_profile.py tools/stagekit/tests tools/test_net_compare.py
           python tools/test_light_storage.py
           python tools/test_sound_lifecycle.py
           python tools/test_sound_transition.py
@@ -123,14 +123,21 @@ jobs:
     # The runner image has the Android SDK and NDK, a JDK and CMake.
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    permissions:
+      contents: write
     steps:
       - name: Install the toolchain
         run: |
           mkdir -p "$RUNNER_TEMP/tools"
+          # (each download checked against the hash it had when it was pinned)
           curl -fsSL -o ninja.zip https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-linux.zip
+          curl -fsSL -o ccache.tar.xz https://github.com/ccache/ccache/releases/download/v4.10.2/ccache-4.10.2-linux-x86_64.tar.xz
+          sha256sum -c - <<'EOF'
+          6f98805688d19672bd699fbbfa2c2cf0fc054ac3df1f0e6a47664d963d530255  ninja.zip
+          80cab87bd510eca796467aee8e663c398239e0df1c4800a0b5dff11dca0b4f18  ccache.tar.xz
+          EOF
           unzip -q ninja.zip -d "$RUNNER_TEMP/tools" && rm ninja.zip
-          curl -fsSL https://github.com/ccache/ccache/releases/download/v4.10.2/ccache-4.10.2-linux-x86_64.tar.xz \
-            | tar -xJ -C "$RUNNER_TEMP/tools" --strip-components=1 ccache-4.10.2-linux-x86_64/ccache
+          tar -xJf ccache.tar.xz -C "$RUNNER_TEMP/tools" --strip-components=1 ccache-4.10.2-linux-x86_64/ccache && rm ccache.tar.xz
           echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
 
       - uses: actions/checkout@v4
@@ -139,6 +146,7 @@ jobs:
         run: |
           python3 tools/test_android_release_features.py
           python3 tools/test_android_chat.py
+          python3 tools/test_tick_input.py
           python3 tools/test_android_touch.py
           python3 tools/test_android_mobile.py
           python3 tools/test_android_render_quit.py
@@ -207,16 +215,28 @@ jobs:
         run: ccache --show-stats
 
       - uses: actions/upload-artifact@v4
+        if: github.ref != 'refs/heads/touch-controls'
         with:
           name: halo-android-debug
           path: dist/halo-android-debug
           retention-days: 3
 
       - uses: actions/upload-artifact@v4
+        if: github.ref != 'refs/heads/touch-controls'
         with:
           name: halo-android-release
           path: dist/halo-android-release
           retention-days: 3
+
+      # All checks and both APK builds above must pass before publishing.
+      # Release assets go straight from this runner to GitHub Releases.
+      - name: Publish checked touch APK and licensed package
+        if: github.ref == 'refs/heads/touch-controls' && (inputs.publish_touch == true || startsWith(github.event.head_commit.message, 'Release OpenCE-Touch '))
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: v0.6.2-touch
+        run: python3 tools/publish_touch_release.py
 
   windows:
     if: github.ref != 'refs/heads/touch-controls'
@@ -232,8 +252,11 @@ jobs:
         shell: pwsh
         run: |
           Invoke-WebRequest -OutFile ninja.zip https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-win.zip
-          Expand-Archive ninja.zip -DestinationPath "$env:RUNNER_TEMP\tools"
           Invoke-WebRequest -OutFile ccache.zip https://github.com/ccache/ccache/releases/download/v4.10.2/ccache-4.10.2-windows-x86_64.zip
+          # (each download checked against the hash it had when it was pinned)
+          if ((Get-FileHash ninja.zip -Algorithm SHA256).Hash -ne "F550FEC705B6D6FF58F2DB3C374C2277A37691678D6ABA463ADCBB129108467A") { throw "ninja.zip: unexpected SHA-256" }
+          if ((Get-FileHash ccache.zip -Algorithm SHA256).Hash -ne "6252F081876A9A9F700FAE13A5AEC5D0D486B28261D7F1F72AC11C7AD9DF4DA9") { throw "ccache.zip: unexpected SHA-256" }
+          Expand-Archive ninja.zip -DestinationPath "$env:RUNNER_TEMP\tools"
           Expand-Archive ccache.zip -DestinationPath $env:RUNNER_TEMP
           Copy-Item "$env:RUNNER_TEMP\ccache-4.10.2-windows-x86_64\ccache.exe" "$env:RUNNER_TEMP\tools"
           Remove-Item ninja.zip, ccache.zip
@@ -452,17 +475,6 @@ jobs:
           while read -r tag; do
             gh release delete "$tag" --cleanup-tag --yes
           done
-
-  touch_release:
-    needs: [android]
-    if: ${{ github.ref == 'refs/heads/touch-controls' && (inputs.publish_touch == true || startsWith(github.event.head_commit.message, 'Release OpenCE-Touch ')) }}
-    permissions:
-      contents: write
-      actions: read
-    uses: ./.github/workflows/touch-release.yml
-    with:
-      build_run: ${{ format('{0}', github.run_id) }}
-      tag: v0.6.1-touch
 
   notify:
     # A Discord embed for the run, to the DISCORD_WEBHOOK secret (nothing

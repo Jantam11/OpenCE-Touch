@@ -21,6 +21,7 @@ memory_watch.c detects that by write-protecting the pages.
 #include "port_config.h"
 #include "../game/cache_file_formats.h"
 
+#include <SDL3/SDL.h>
 #include <stdio.h>
 #ifdef HALO_GLES
 #define GL_BGRA GL_RGBA
@@ -863,7 +864,9 @@ struct texture_entry
 };
 
 #define TEXTURE_BUCKET_COUNT 4096
-#define TEXTURE_IDLE_FRAMES 1800
+#define TEXTURE_SWEEP_SECONDS 10
+#define TEXTURE_IDLE_SECONDS 30
+#define TEXTURE_SWEEP_COUNT (TEXTURE_IDLE_SECONDS / TEXTURE_SWEEP_SECONDS)
 #define MAXIMUM_PALETTE_VARIANTS 8
 
 static struct texture_entry *texture_buckets[TEXTURE_BUCKET_COUNT];
@@ -883,6 +886,11 @@ static struct
 } recent_textures[RECENT_TEXTURE_COUNT];
 static unsigned long texture_drop_serial = 1;
 static unsigned long texture_frame = 0;
+/* the frame of each of the last sweeps, a sweep apart, and when the next
+is due */
+static unsigned long texture_sweep_frames[TEXTURE_SWEEP_COUNT];
+static unsigned long texture_sweep_count = 0;
+static Uint64 texture_next_sweep = 0;
 
 /* (every bit of the three mixed into the top ones: textures are aligned,
 and few sizes and formats are common) */
@@ -905,6 +913,22 @@ static unsigned long palette_hash(const D3DCOLOR *palette)
 	for (index = 0; index < 256; index++)
 		hash = (hash ^ palette[index]) * 16777619UL;
 	return hash ? hash : 1;
+}
+
+/* display.high_res_hud, read again only when a setting changes: it is asked
+at every bind, and config_boolean takes the settings' lock and looks the name
+up among them all */
+static BOOL high_res_hud(void)
+{
+	static unsigned long read_at = (unsigned long)-1;
+	static BOOL enabled;
+
+	if (read_at != config_changes())
+	{
+		read_at = config_changes();
+		enabled = config_boolean("display.high_res_hud") != 0;
+	}
+	return enabled;
 }
 
 /* an entry's GL texture and description: its replacement's, if it has one,
@@ -961,7 +985,7 @@ static GLuint texture_entry_result(struct texture_entry *entry, GLenum *target,
 	}
 	/* These sheets keep the map's art and coordinates. Decode through the
 	 * normal format reader; the HUD module owns only the interpolation. */
-	if (config_boolean("display.high_res_hud"))
+	if (high_res_hud())
 	{
 		if (!entry->hud_upscale_checked)
 		{
@@ -1138,6 +1162,7 @@ GLuint xgpu_texture_get(const DWORD *resource, const D3DCOLOR *palette, GLenum *
 			}
 			upload(entry->texture, entry->target, &entry->description, (const unsigned char *)entry->address, palette,
 				custom_edition_texels_order(entry->address));
+			xgpu_statistics_texture_upload(entry->size);
 		}
 	}
 	entry->last_used_frame = texture_frame;
@@ -1155,8 +1180,9 @@ GLuint xgpu_texture_get(const DWORD *resource, const D3DCOLOR *palette, GLenum *
 
 void xgpu_texture_cache_begin_frame(void)
 {
-	unsigned long index;
+	unsigned long index, idle_since;
 	unsigned long changed = hud_hires_settings_changed();
+	Uint64 now;
 
 	/* Refresh only map bitmaps belonging to the setting that changed. Keep
 	 * decoded replacement art and world textures; rebuild native pixels on
@@ -1177,9 +1203,18 @@ void xgpu_texture_cache_begin_frame(void)
 		xgpu_gl_state_invalidate();
 	}
 	texture_frame++;
-	if (texture_frame % 600)
+	now = SDL_GetTicks();
+	if (now < texture_next_sweep)
 		return;
-	/* drop textures that have not been used for a while */
+	texture_next_sweep = now + TEXTURE_SWEEP_SECONDS * 1000;
+	/* drop the textures not used since the sweep half a minute ago (none
+	before the first sweeps, which find frame 0). The time is counted in
+	seconds, not frames: 1800 frames, half a minute at 60 frames a second, is
+	five seconds at 360, and a texture out of sight that long was converted
+	and uploaded again when it came back into view */
+	idle_since = texture_sweep_frames[texture_sweep_count % TEXTURE_SWEEP_COUNT];
+	texture_sweep_frames[texture_sweep_count % TEXTURE_SWEEP_COUNT] = texture_frame;
+	texture_sweep_count++;
 	for (index = 0; index < TEXTURE_BUCKET_COUNT; index++)
 	{
 		struct texture_entry **link = &texture_buckets[index];
@@ -1188,7 +1223,7 @@ void xgpu_texture_cache_begin_frame(void)
 		{
 			struct texture_entry *entry = *link;
 
-			if (texture_frame - entry->last_used_frame > TEXTURE_IDLE_FRAMES)
+			if (texture_frame - entry->last_used_frame > texture_frame - idle_since)
 			{
 				*link = entry->next;
 				glDeleteTextures(1, &entry->texture);

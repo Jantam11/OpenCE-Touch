@@ -35,8 +35,10 @@ one deletes or keeps is no authority, so
   keeps the newest of each host (by sequence), drops one not heard in
   GAME_EXPIRY (on its own clock; a retained copy is taken only if its time
   is within RETAINED_WINDOW of this machine's, from a host that died and
-  left it), takes a host's closing listing (a tombstone) as its end, and
-  ignores an emptied slot (a wipe is not a delete).
+  left it, and a live one only within LIVE_WINDOW, so an old listing
+  published again by someone else does not list a game long gone), takes
+  a host's closing listing (a tombstone) as its end, and ignores an
+  emptied slot (a wipe is not a delete).
 A host that stops publishes a tombstone, then clears its slot. Going private
 makes a new invite (p2p.c), so a listing seen before lets no one in.
 
@@ -99,6 +101,8 @@ enum
 	VERIFY_BUDGET = 2,
 	/* seconds */
 	RETAINED_WINDOW = 600,
+	/* (wide: a host whose clock is off is still listed) */
+	LIVE_WINDOW = 3600,
 };
 
 static const char signature_label[] = "hceu-lobby-1";
@@ -197,6 +201,15 @@ static struct
 	/* the identifiers of games joining failed */
 	unsigned char failed[MAXIMUM_GAMES][P2P_IDENTIFIER_SIZE];
 	int failed_count;
+	/* the hosts heard listing a game of a newer network version, which are
+	not shown (an old build sees none of the games: the browser says why),
+	each forgotten as a game is (GAME_EXPIRY) */
+	struct
+	{
+		unsigned char key_hash[P2P_KEY_HASH_SIZE];
+		unsigned long heard_time;
+		int used;
+	} newer[MAXIMUM_GAMES];
 } lobby;
 
 static int elapsed(unsigned long since, unsigned long time)
@@ -686,6 +699,28 @@ static void update_probes(void)
 	}
 }
 
+/* a host heard listing a game of a newer network version (lobby.newer) */
+static void newer_heard(const unsigned char *key_hash)
+{
+	int index, free_index = -1;
+
+	for (index = 0; index < MAXIMUM_GAMES; index++)
+	{
+		if (lobby.newer[index].used && !memcmp(lobby.newer[index].key_hash, key_hash, P2P_KEY_HASH_SIZE))
+		{
+			lobby.newer[index].heard_time = p2p_now();
+			return;
+		}
+		if (!lobby.newer[index].used && free_index < 0)
+			free_index = index;
+	}
+	if (free_index < 0)
+		return;
+	memcpy(lobby.newer[free_index].key_hash, key_hash, P2P_KEY_HASH_SIZE);
+	lobby.newer[free_index].heard_time = p2p_now();
+	lobby.newer[free_index].used = 1;
+}
+
 static void update_browsing(void)
 {
 	unsigned long start = p2p_now();
@@ -705,18 +740,27 @@ static void update_browsing(void)
 		int good;
 
 		memmove(lobby.queue, lobby.queue + 1, sizeof(*lobby.queue) * (size_t)(--lobby.queue_count));
+		/* (a newer version's game is counted, not shown: its host's key
+		hash only, unverified, so it is no more than a count) */
+		if (lobby.browsing && listing_read(queued.payload, queued.size, &listing) &&
+			listing.version > HALO_PORT_NETWORK_VERSION && !(listing.flags & _listing_closed))
+		{
+			newer_heard(queued.key_hash);
+			continue;
+		}
 		if (!listing_read(queued.payload, queued.size, &listing) || listing.version != HALO_PORT_NETWORK_VERSION ||
 			!signing_key_hash(listing.key, key_hash) || memcmp(key_hash, queued.key_hash, P2P_KEY_HASH_SIZE))
 		{
 			continue;
 		}
 		/* a slot's retained copy: only one of about now (a host that died
-		left it, and nothing cleared it) */
-		if (queued.retained)
+		left it, and nothing cleared it); a live one: not one long gone,
+		published again by someone who kept it */
 		{
 			long difference = (long)(listing.time - (unsigned long)time(NULL));
+			long window = queued.retained ? RETAINED_WINDOW : LIVE_WINDOW;
 
-			if (difference > RETAINED_WINDOW || difference < -RETAINED_WINDOW)
+			if (difference > window || difference < -window)
 				continue;
 		}
 		/* (the work, without the lock: the game's threads need not wait) */
@@ -732,6 +776,8 @@ static void update_browsing(void)
 	{
 		if (lobby.games[index].used && elapsed(lobby.games[index].heard_time, GAME_EXPIRY))
 			lobby.games[index].used = 0;
+		if (lobby.newer[index].used && elapsed(lobby.newer[index].heard_time, GAME_EXPIRY))
+			lobby.newer[index].used = 0;
 	}
 	if (lobby.browsing)
 		update_probes();
@@ -868,6 +914,7 @@ void p2p_lobby_browse(int on)
 		if (!on)
 		{
 			memset(lobby.games, 0, sizeof(lobby.games));
+			memset(lobby.newer, 0, sizeof(lobby.newer));
 			lobby.queue_count = 0;
 		}
 		lobby.query_wanted = on;
@@ -952,6 +999,18 @@ int p2p_listing_unlock(struct p2p_listing *listing, const char *password)
 	memset(key, 0, sizeof(key));
 	memset(bytes, 0, sizeof(bytes));
 	return opened;
+}
+
+int p2p_lobby_newer_games(void)
+{
+	int count = 0;
+	int index;
+
+	pthread_mutex_lock(&p2p_lock);
+	for (index = 0; index < MAXIMUM_GAMES; index++)
+		count += lobby.newer[index].used;
+	pthread_mutex_unlock(&p2p_lock);
+	return count;
 }
 
 void p2p_lobby_mark_failed(const unsigned char *identifier)

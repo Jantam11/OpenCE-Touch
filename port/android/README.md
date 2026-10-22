@@ -469,3 +469,8 @@ Mobile regressions: `python tools/test_android_touch.py` and `python tools/test_
 General settings > Edit in-game HUD moves health, weapons and radar panels. Drag, then Save; Android Back also saves. The app retains HUD positions separately from `.halolayout` imports/exports and keeps stock positions in split screen. Settings > Video Setup > Extra Display adds optional timers (off), loading-screen time (no added wait) and draw distance (Stock 1024). Texture decoding defaults to Auto, with a CPU workaround on Adreno; changing it requires restarting. Settings > Network Setup > Privacy exposes only supported services. Press OK in native settings before exiting. Previously invalid duplicate-section config files repair themselves at startup.
 
 Adapted work: ChupathingyCE/MrMilenko, FulGerNet/theLlamaNet, xshxdex98/DamnationCE; see README and INTEGRATION_NOTES for source revisions. MCC maps are not enabled in this release.
+
+  on a device. The translation also has no scalar conversion from floating
+  point to an integer in a SIMD register (`fcvtzs s0, s1`, an illegal
+  instruction there), so `tools/android_asm_convert.py` writes each as the
+  vector form, which leaves the register and the exception flags the same.

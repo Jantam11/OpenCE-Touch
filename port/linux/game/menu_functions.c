@@ -107,6 +107,7 @@ void platform_display_apply(void);
 void platform_binding_capture_begin(void);
 int platform_binding_capture_poll(int *input);
 void halo_input_name(int input, char *name, unsigned int size);
+void halo_input_shown_name(char const *binding, char *shown, unsigned int size);
 short pc_menu_string_index(long definition_index);
 /* cseries_windows.c's */
 unsigned long system_milliseconds(void);
@@ -992,6 +993,8 @@ static short map_kind_first(short chosen, short count)
 	return (short)PIN(chosen - MAP_KIND_ROWS / 2, 0, MAX(count - MAP_KIND_ROWS, 0));
 }
 
+static boolean list_scrolls_at_end(void);
+
 static void map_kind_focus(struct widget_instance *list, short first, short chosen)
 {
 	focus_row(list, (short)(1 + chosen - first));
@@ -1007,12 +1010,12 @@ static short map_kind_rows_update(struct widget_instance *list, short *first, sh
 	short row = focused_row(list), index = 0;
 	struct widget_instance *child;
 
-	if (row != NONE && row >= 1 && row == shown && *first + shown < count)
+	if (row != NONE && row >= 1 && row == shown && *first + shown < count && list_scrolls_at_end())
 	{
 		(*first)++;
 		focus_row(list, --row);
 	}
-	else if (row == 1 && *first > 0)
+	else if (row == 1 && *first > 0 && list_scrolls_at_end())
 	{
 		(*first)--;
 		focus_row(list, ++row);
@@ -1600,6 +1603,7 @@ static boolean color_list_initialize(struct widget_instance *list)
 
 /* (ui_widget.c) whether the pointer moved the menus' focus last */
 boolean ui_widget_port_pointer_focused(void);
+boolean ui_widget_port_hover_focused(void);
 
 /* Whether a list whose focus is on its first or last row moves on: when the
 d-pad put it there. The pointer resting there would make it move every
@@ -1667,20 +1671,23 @@ BITMAP_FRAMES): Gamepad Setup's row's, as the list numbers its rows
 the PC version's nine the Xbox's five of the button settings */
 #define PROFILE_GAMEPAD_FRAME 2
 #define PROFILE_FIRST_LAYOUT_FRAME 9
+#define PROFILE_LAYOUT_FRAMES (_button_preset_swap_b_and_right_thumb + 1)
 
 /* "port gamepad layout preview" (the picture's own): on Gamepad Setup's
-row, the edited profile's button settings */
+row, the edited profile's button settings; the port's own (Bumper Jumper),
+of which the Xbox has no picture, keeps the row's */
 static void profile_gamepad_layout(struct widget_instance *picture)
 {
 	struct player_profile *profile = player_ui_get_edit_player_profile();
 	short frame = picture->animation.current_frame_index;
 
 	if (frame == PROFILE_GAMEPAD_FRAME ||
-		(frame >= PROFILE_FIRST_LAYOUT_FRAME && frame < PROFILE_FIRST_LAYOUT_FRAME + NUMBER_OF_BUTTON_PRESETS))
+		(frame >= PROFILE_FIRST_LAYOUT_FRAME && frame < PROFILE_FIRST_LAYOUT_FRAME + PROFILE_LAYOUT_FRAMES))
 	{
-		picture->animation.current_frame_index = (short)(PROFILE_FIRST_LAYOUT_FRAME +
-			(profile && profile->controller_settings.button_preset < NUMBER_OF_BUTTON_PRESETS ?
-				profile->controller_settings.button_preset : _button_preset_standard));
+		byte preset = profile ? profile->controller_settings.button_preset : (byte)_button_preset_standard;
+
+		picture->animation.current_frame_index = preset < PROFILE_LAYOUT_FRAMES ?
+			(short)(PROFILE_FIRST_LAYOUT_FRAME + preset) : PROFILE_GAMEPAD_FRAME;
 	}
 }
 
@@ -2182,15 +2189,21 @@ static void controls_update(struct widget_instance *list)
 		{
 			char const *binding = controls_screen.bindings[control][slot];
 			wchar_t text[ROW_TEXT_LENGTH];
+			char name[CONTROL_NAME_LENGTH];
 			char shown[64];
 			short index;
 
+			/* (the key as the keyboard's layout labels it: xinput_sdl.c) */
+			if (*binding)
+				halo_input_shown_name(binding, name, sizeof(name));
+			else
+				snprintf(name, sizeof(name), "%s", "-");
 			if (controls_screen.capturing_control == control && controls_screen.capturing_slot == slot)
 				snprintf(shown, sizeof(shown), "%s", "PRESS A KEY");
 			else if (row == focused_row && controls_screen.slot == slot)
-				snprintf(shown, sizeof(shown), "> %s <", *binding ? binding : "-");
+				snprintf(shown, sizeof(shown), "> %s <", name);
 			else
-				snprintf(shown, sizeof(shown), "%s", *binding ? binding : "-");
+				snprintf(shown, sizeof(shown), "%s", name);
 			for (index = 0; shown[index] && index < ROW_TEXT_LENGTH - 1; index++)
 				text[index] = (wchar_t)(unsigned char)shown[index];
 			text[index] = 0;
@@ -3362,9 +3375,9 @@ gametype_options' coop_extra_enemies_spinner has them, in this order): its
 amount's row is the choice's */
 enum
 {
-	_cooperative_enemies_none,
 	_cooperative_enemies_per_player,
 	_cooperative_enemies_multiplier,
+	_cooperative_enemies_none,
 	NUMBER_OF_COOPERATIVE_ENEMIES_MODES
 };
 
@@ -3504,7 +3517,8 @@ static void server_settings_update(struct widget_instance *list)
 	browser, or PRIVATE, for this game. Its help is its choice's */
 	visible_set(named(list, "op_listing", 0), multiplayer.mode == _multiplayer_mode_host_internet &&
 		config_boolean("network.online") && config_boolean("network.public_lobby"));
-	if ((spinner = named(list, "listing_spinner", 0)) != NULL && named(list, "op_listing", 0)->visible)
+	if ((spinner = named(list, "listing_spinner", 0)) != NULL && named(list, "op_listing", 0) &&
+		named(list, "op_listing", 0)->visible)
 	{
 		boolean public = spinner->parameters.list.selected_index == 0;
 		struct widget_instance *help = list->parameters.list.extended_description;
@@ -3666,12 +3680,21 @@ static short browser_row_index(struct widget_instance *row)
 	return row && !strncmp(row->name, "server_item_", 12) ? (short)(atoi(row->name + 12) - 1) : NONE;
 }
 
-/* the ping each row shows (-1: none), coloured by pc_menu_text_color */
+/* the ping each row shows (-1: none), coloured by pc_menu_text_color: green
+under PING_GOOD milliseconds, yellow under PING_FAIR, red above */
 static short browser_row_pings[BROWSER_ROWS];
+enum
+{
+	PING_GOOD = 80,
+	PING_FAIR = 160,
+};
+#define PING_COLOR_GOOD 0x5ED38CFFUL
+#define PING_COLOR_FAIR 0xE8C547FFUL
+#define PING_COLOR_POOR 0xE86A5AFFUL
 
 /* ui_widget.c: a text's colour in place of its own (FALSE: its own): a
-server browser row's ping by how good it is, as the Online Games browser
-colours it */
+server browser row's ping by how good it is */
+
 boolean pc_menu_text_color(struct widget_instance *widget, real_argb_color *color)
 {
 	short row = widget->parent ? browser_row_index(widget->parent) : NONE;
@@ -3683,8 +3706,8 @@ boolean pc_menu_text_color(struct widget_instance *widget, real_argb_color *colo
 	ping = browser_row_pings[row];
 	if (ping < 0)
 		return FALSE;
-	rgba = ping < OVERLAY_PING_GOOD ? OVERLAY_COLOR_GOOD : ping < OVERLAY_PING_FAIR ? OVERLAY_COLOR_FAIR :
-		OVERLAY_COLOR_POOR;
+	rgba = ping < PING_GOOD ? PING_COLOR_GOOD : ping < PING_FAIR ? PING_COLOR_FAIR : PING_COLOR_POOR;
+
 	color->red = (real)((rgba >> 24) & 0xFF) / 255.0f;
 	color->green = (real)((rgba >> 16) & 0xFF) / 255.0f;
 	color->blue = (real)((rgba >> 8) & 0xFF) / 255.0f;
@@ -3916,6 +3939,7 @@ static struct
 	/* the last that failed, and when */
 	char failed_name[P2P_LISTING_NAME_SIZE + 1];
 	unsigned long failed_time;
+	boolean failed_nat_strict;
 	/* a game with a password chosen: the password screen's (its own copy:
 	the rows' are read again each frame), and a join it began, which the
 	browser takes up again as it comes back */
@@ -4146,6 +4170,7 @@ static void lobby_browser_update(struct widget_instance *list)
 			p2p_lobby_mark_failed(lobby_browser.identifier);
 			csmemcpy(lobby_browser.failed_name, lobby_browser.name, sizeof(lobby_browser.failed_name));
 			lobby_browser.failed_time = now ? now : 1;
+			lobby_browser.failed_nat_strict = p2p_nat_strict();
 			lobby_browser.joining = FALSE;
 			platform_log("menus: could not reach the server browser's game %s", lobby_browser.name);
 			ui_play_audio_feedback_sound(SOUND_ERROR);
@@ -4167,12 +4192,26 @@ static void lobby_browser_update(struct widget_instance *list)
 		else if (lobby_browser.failed_time && now - lobby_browser.failed_time < LOBBY_BROWSER_FAILED_TIME)
 		{
 			text_to_wide(lobby_browser.failed_name, name, NUMBEROF(name));
-			usnprintf(text, NUMBEROF(text) - 1, L"Could not reach %s", name);
+			/* (and why, when this network's NAT is what stops it: the router's
+			UPnP, or a forwarded network.tunnel_port, lets it through) */
+			usnprintf(text, NUMBEROF(text) - 1, lobby_browser.failed_nat_strict ?
+				L"Strict NAT, turn on UPnP: could not reach %s" :
+				L"Could not reach %s", name);
 		}
 		else if (!lobby_browser.count)
 		{
-			usnprintf(text, NUMBEROF(text) - 1, L"%s", now - lobby_browser.begin_time < LOBBY_BROWSER_LOOK_TIME ?
-				L"Looking for public games..." : L"No public games found");
+			/* (an old build sees none of the games: it says why) */
+			int newer = p2p_lobby_newer_games();
+
+			if (now - lobby_browser.begin_time < LOBBY_BROWSER_LOOK_TIME)
+				usnprintf(text, NUMBEROF(text) - 1, L"Looking for public games...");
+			else if (newer)
+			{
+				usnprintf(text, NUMBEROF(text) - 1, L"%d %s on a newer version: update the game to join", newer,
+					newer == 1 ? L"game is" : L"games are");
+			}
+			else
+				usnprintf(text, NUMBEROF(text) - 1, L"No public games found");
 		}
 		else if (chosen < lobby_browser.count)
 		{
@@ -4611,6 +4650,24 @@ static boolean pause_end_game(void)
 		return campaign_fail();
 	game_engine_end_game();
 	return TRUE;
+}
+
+/* "port coop friendly fire" (network co-op's pause menu's FRIENDLY FIRE,
+menu_tags.c): switches this machine's own friendly fire, from now on */
+static boolean coop_friendly_fire_change(void)
+{
+	char const *choice = config_boolean("network.coop_own_friendly_fire") ? "false" : "true";
+
+	if (!config_write("network.coop_own_friendly_fire", choice))
+		platform_log("menus: could not write network.coop_own_friendly_fire to config.toml");
+	ui_play_audio_feedback_sound(SOUND_FORWARD);
+	return TRUE;
+}
+
+/* "port coop friendly fire text": the button's text, ON or OFF */
+static void coop_friendly_fire_text(struct widget_instance *button)
+{
+	button->parameters.text_box.string_list_index = config_boolean("network.coop_own_friendly_fire") ? 0 : 1;
 }
 
 /* ---- the lobby: the game's players (up to the port's 128), its map and
@@ -5328,12 +5385,17 @@ static struct gametype_option const gametype_options[] =
 	{ "votekick_spinner", _option_setting, 0, 0, 2, { 0 }, "network.votekick", { "true", "false" } },
 	/* (and the text chat: port/linux/game/network_chat.c) */
 	{ "text_chat_spinner", _option_setting, 0, 0, 3, { 0 }, "network.text_chat", { "on", "links", "off" } },
+	{ "aim_assist_spinner", _option_setting, 0, 0, 2, { 0 }, "network.block_mouse_aim_assist", { "false", "true" } },
 	/* co-op's options (Server Setup's CO-OP OPTIONS: tools/port_settings.py's
 	COOP_SETUP_SCREENS; coop_enemies.c) */
 	{ "coop_friendly_fire_spinner", _option_setting, 0, 0, 4, { 0 }, "network.coop_friendly_fire",
 		{ "off", "on", "shields_only", "explosives_only" } },
 	{ "coop_extra_enemies_spinner", _option_setting, 0, 0, 3, { 0 }, "network.coop_enemies_mode",
-		{ "none", "per_player", "multiplier" } },
+		{ "per_player", "multiplier", "none" } },
+	{ "coop_extra_pickups_spinner", _option_setting, 0, 0, 3, { 0 }, "network.coop_pickups",
+		{ "per_player", "multiplier", "none" } },
+	{ "coop_extra_vehicles_spinner", _option_setting, 0, 0, 3, { 0 }, "network.coop_vehicles",
+		{ "per_player", "multiplier", "none" } },
 	{ "coop_enemies_per_player_spinner", _option_setting, 0, 0, 5, { 0 }, "network.coop_enemies",
 		{ "25", "50", "100", "150", "200" } },
 	{ "coop_enemies_multiplier_spinner", _option_setting, 0, 0, 5, { 0 }, "network.coop_enemies_multiplier",
@@ -5888,14 +5950,37 @@ static void gametype_option_help(struct widget_instance *list)
 	/* (TEXT CHAT held at OFF while the game is listed: text_chat_locked) */
 	if (named(list, TEXT_CHAT_SPINNER, 0) && p2p_hosting_listed())
 		named(list, TEXT_CHAT_SPINNER, 0)->parameters.list.selected_index = TEXT_CHAT_OFF;
-	/* (CO-OP OPTIONS: the row of the amount of the extra enemies chosen,
-	PER PLAYER's or MULTIPLIER's, in the one place) */
+	/* CO-OP OPTIONS: enemies, pickups and vehicles share the amount rows.
+	Mixed modes may need both rows at once. */
 	if (named(list, "coop_extra_enemies_spinner", 0))
 	{
 		short mode = named(list, "coop_extra_enemies_spinner", 0)->parameters.list.selected_index;
 
-		visible_set(named(list, "op_coop_enemies_per_player", 0), mode == _cooperative_enemies_per_player);
-		visible_set(named(list, "op_coop_enemies_multiplier", 0), mode == _cooperative_enemies_multiplier);
+		struct widget_instance *pickups = named(list, "coop_extra_pickups_spinner", 0);
+		struct widget_instance *vehicles = named(list, "coop_extra_vehicles_spinner", 0);
+		boolean per_player = mode == _cooperative_enemies_per_player ||
+			(pickups && pickups->parameters.list.selected_index == _cooperative_enemies_per_player) ||
+			(vehicles && vehicles->parameters.list.selected_index == _cooperative_enemies_per_player);
+		boolean multiplier = mode == _cooperative_enemies_multiplier ||
+			(pickups && pickups->parameters.list.selected_index == _cooperative_enemies_multiplier) ||
+			(vehicles && vehicles->parameters.list.selected_index == _cooperative_enemies_multiplier);
+
+		visible_set(named(list, "op_coop_enemies_per_player", 0), per_player);
+		visible_set(named(list, "op_coop_enemies_multiplier", 0), multiplier);
+
+		/* Hidden amounts must not reserve a blank row. Offsets are relative
+		to the parent: moving only the row carries its labels and spinners
+		with it when widget_instance_render_recursive draws and notes targets. */
+		{
+			short y = 73;
+
+			for (row = list->child; row; row = row->next)
+				if (row->visible && !strncmp(row->name, "op_coop_", 8))
+				{
+					row->vertical_offset = y;
+					y += 30;
+				}
+		}
 	}
 	/* (the server browser's filters, hidden: their helps are fewer than
 	their values) */
@@ -6126,6 +6211,10 @@ boolean pc_menu_event_function_invoke(
 		else if (!strcmp(name, "port pause end game"))
 		{
 			return pause_end_game();
+		}
+		else if (!strcmp(name, "port coop friendly fire"))
+		{
+			return coop_friendly_fire_change();
 		}
 		else if (!strcmp(name, "player profile save changes"))
 		{
@@ -6433,4 +6522,6 @@ void pc_menu_game_data_function_invoke(
 		saved_game_list_update(widget);
 	else if (!strcmp(name, "port gamepad layout preview"))
 		profile_gamepad_layout(widget);
+	else if (!strcmp(name, "port coop friendly fire text"))
+		coop_friendly_fire_text(widget);
 }
