@@ -364,7 +364,7 @@ static int mouse_is_aim_device(short gamepad_index)
     if (gamepad_index != 0) return FALSE;
     pthread_mutex_lock(&mouse_lock);
     aiming = stick_aimed_ms == 0 || mouse_aimed_ms >= stick_aimed_ms;
-#ifdef HALO_ANDROID
+#if defined(HALO_ANDROID) && !defined(HALO_TOUCH_SDL_GAMEPAD)
     if (touch_aimed_ms != 0 && touch_aimed_ms >= mouse_aimed_ms &&
         touch_aimed_ms >= stick_aimed_ms) aiming = FALSE;
 #endif

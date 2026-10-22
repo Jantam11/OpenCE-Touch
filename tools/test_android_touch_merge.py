@@ -21,6 +21,11 @@ for name in ['halo_linux_touch_move', 'halo_linux_touch_look', 'halo_linux_touch
 code = '#include <assert.h>\n#define HALO_ANDROID 1\n#define HALO_TOUCH_SDL_GAMEPAD 1\n#define TRUE 1\n#define FALSE 0\n'
 code += '\n'.join(functions)
 code += '\nint main(void) { float f=1,s=1,y=1,p=1,gy=1,gp=1; assert(!halo_linux_touch_move(0,&f,&s)); assert(f==0 && s==0); assert(!halo_linux_touch_look(0,&y,&p,&gy,&gp)); assert(y==0 && p==0 && gy==0 && gp==0); assert(!halo_linux_touch_aiming(0)); return 0; }\n'
+start = xinput.index('static int mouse_is_aim_device(')
+end = xinput.index('\n}', start) + 2
+aim = '#include <assert.h>\n#define HALO_ANDROID 1\n#define HALO_TOUCH_SDL_GAMEPAD 1\n#define FALSE 0\nstatic int mouse_lock; static unsigned long mouse_aimed_ms, stick_aimed_ms;\nstatic void pthread_mutex_lock(int *p) {(void)p;}\nstatic void pthread_mutex_unlock(int *p) {(void)p;}\n'
+aim += xinput[start:end]
+aim += '\nint main(void) { assert(mouse_is_aim_device(0)); assert(!mouse_is_aim_device(1)); stick_aimed_ms=2; assert(!mouse_is_aim_device(0)); mouse_aimed_ms=3; assert(mouse_is_aim_device(0)); return 0; }\n'
 progress = (ROOT / 'source/interface/progress_bar.c').read_text()
 start = progress.index('\t\tIDirect3DSurface8_Release(back_buffer);', progress.index('static void progress_bar_make_stuff_ready(', progress.index('static void progress_bar_make_stuff_ready(')+1))
 end = progress.index('\n\t}', start)
@@ -30,6 +35,7 @@ suffix = '\n}\nint main(void) { int d; check(NULL); assert(releases==2); check(&
 with tempfile.TemporaryDirectory() as directory:
     folder=Path(directory)
     assert run(code,'one_touch_consumer',folder)==0
+    assert run(aim,'editable_aim_device',folder)==0
     assert run(prefix+release+suffix,'depth_optional',folder)==0
     assert run(prefix+release.replace('if (depth_buffer)', 'if (1)')+suffix,'old_depth',folder)!=0
 print('Android single touch-consumer and optional depth-buffer checks passed.')
