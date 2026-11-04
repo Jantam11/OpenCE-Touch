@@ -1,0 +1,67 @@
+name: Integrate pinned upstream into isolated test branch
+on:
+  push:
+    branches:
+      - integration/upstream-2026-11-04
+    paths:
+      - .github/workflows/integration-merge.yml
+
+permissions:
+  contents: write
+
+jobs:
+  integrate-and-test:
+    if: github.repository == 'Jantam11/OpenCE-Touch' && github.ref == 'refs/heads/integration/upstream-2026-11-04'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Merge verified upstream with fork's conflicting sections preferred
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git remote add upstream https://github.com/OpenCommunityEdition/OpenCE.git
+          git fetch --no-tags upstream main
+          want=899219cc0a14b03bc12f0517a1e9ee4c37158af8
+          test "$(git rev-parse FETCH_HEAD)" = "$want"
+          git merge --no-ff -X ours -m "Merge OpenCE upstream 899219cc (Android and multiplayer integration candidate)" FETCH_HEAD
+          test -z "$(git ls-files -u)"
+          grep -Eq '^[[:space:]]*#define HALO_PORT_NETWORK_VERSION 41' port/linux/include/halo_port_limits.h
+          test -f port/android/app/src/main/java/com/halo/decomp/TouchRegions.java
+          test -f tools/test_touch_regions.py
+          grep -q 'TouchRegions' port/android/app/src/main/java/com/halo/decomp/TouchControls.java
+          test -f port/android/app/src/main/java/com/halo/decomp/HudLayout.java
+          test -f port/assets/menus/skin/cairo/ce/main_menu.quit_select.xml
+          echo 'Combined commit:'
+          git log -1 --format='%h %s%nparents: %p'
+          echo 'Pushing only the isolated integration branch.'
+          git push origin HEAD:refs/heads/integration/upstream-2026-11-04
+      - name: Check fork touch regressions and upstream menu tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install -q pytest
+          python3 tools/test_android_touch.py
+          python3 tools/test_touch_regions.py
+          python3 tools/test_android_mobile.py
+          python3 tools/test_android_render_quit.py
+          python3 tools/test_camera_touch.py
+          python3 tools/test_android_touch_merge.py
+          python3 tools/test_touch_layout.py
+          python3 tools/test_android_release_features.py
+          python3 tools/test_virtual_keyboard_input.py
+          python3 -m pytest -q tools/test_touch_menu.py tools/harness
+      - name: Check generated menus, networking and config definitions
+        shell: bash
+        if: success()
+        run: |
+          set -euo pipefail
+          python3 -m pytest -q tools/test_net_compare.py tools/test_profile.py
+          python3 tools/test_android_chat.py
+          python3 tools/test_tick_input.py
+          git diff --exit-code -- port/linux/include/halo_port_limits.h
