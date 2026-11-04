@@ -41,6 +41,11 @@ public class MobileCheck {
   require(!d.screenRegions && !d.moveRight && d.regionSplit==.5f && d.sideZone==.06f && d.forwardZone==.06f);
   c.screenRegions=true;c.moveRight=true;c.regionSplit=.35f;c.sideZone=.1f;c.forwardZone=.12f;
   String regionSaved=c.encode();TouchConfiguration regions=TouchConfiguration.decode(regionSaved);
+  require(regions.fireDragAim);
+  c.fireDragAim=false;
+  require(!TouchConfiguration.decode(c.encode()).fireDragAim);
+  rejects(c.encode().replace("fire-drag-aim=false","fire-drag-aim=unknown"));
+  c.fireDragAim=true;
   require(regions.screenRegions&&regions.moveRight&&regions.regionSplit==.35f&&regions.sideZone==.1f&&regions.forwardZone==.12f);
   rejects(regionSaved.replace("region-split=0.35","region-split=NaN"));
   rejects(regionSaved.replace("region-split=0.35","region-split=0.1"));
