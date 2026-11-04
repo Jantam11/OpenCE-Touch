@@ -22,6 +22,8 @@ name: Build
 # site on GitHub Pages (https://halocombatevolved.com/, port/web/README.md).
 on:
   push:
+    branches-ignore:
+      - 'integration/upstream-2026-11-04'
     paths-ignore:
       - "**.md"
   workflow_dispatch:

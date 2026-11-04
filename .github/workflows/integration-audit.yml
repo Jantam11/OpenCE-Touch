@@ -1,0 +1,45 @@
+name: Upstream integration merge audit
+on:
+  push:
+    branches:
+      - integration/upstream-2026-11-04
+    paths:
+      - .github/workflows/integration-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  merge-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Inspect upstream merges without changing the branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git remote add upstream https://github.com/OpenCommunityEdition/OpenCE.git
+          git fetch --no-tags upstream main
+          want=899219cc0a14b03bc12f0517a1e9ee4c37158af8
+          have="$(git rev-parse FETCH_HEAD)"
+          echo "Pinned upstream: $have"
+          test "$have" = "$want"
+          echo "::group::Unresolved files with an ordinary merge"
+          git merge --no-ff --no-commit FETCH_HEAD || true
+          git diff --name-only --diff-filter=U | tee /tmp/ordinary-conflicts.txt
+          echo "Count: $(wc -l < /tmp/ordinary-conflicts.txt)"
+          git merge --abort
+          echo "::endgroup::"
+          echo "::group::Unresolved files with strategy -X ours"
+          git merge --no-ff --no-commit -X ours FETCH_HEAD || true
+          git diff --name-only --diff-filter=U | tee /tmp/ours-conflicts.txt
+          echo "Count: $(wc -l < /tmp/ours-conflicts.txt)"
+          echo "Staged change count: $(git diff --cached --name-only | wc -l)"
+          git diff --cached --check || true
+          git merge --abort
+          echo "::endgroup::"
+          echo "This was a read-only audit; no upstream code was committed or released."
