@@ -1,0 +1,90 @@
+name: Validate OpenCE Android integration
+on:
+  push:
+    branches:
+      - integration/upstream-2026-11-04
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Source and platform regression suite
+        run: |
+          set -euo pipefail
+          python3 -m pip install -q pytest
+          grep -Eq '^[[:space:]]*#define HALO_PORT_NETWORK_VERSION 41' port/linux/include/halo_port_limits.h
+          test -f port/android/app/src/main/java/com/halo/decomp/TouchRegions.java
+          python3 tools/test_android_touch.py
+          python3 tools/test_touch_regions.py
+          python3 tools/test_android_mobile.py
+          python3 tools/test_android_render_quit.py
+          python3 tools/test_camera_touch.py
+          python3 tools/test_android_touch_merge.py
+          python3 tools/test_touch_layout.py
+          python3 tools/test_android_release_features.py
+          python3 tools/test_virtual_keyboard_input.py
+          python3 tools/test_android_chat.py
+          python3 tools/test_tick_input.py
+          python3 -m pytest -q tools/test_touch_menu.py tools/harness tools/test_net_compare.py tools/test_profile.py
+      - name: Additional upstream Android rendering coverage
+        run: |
+          set -euo pipefail
+          python3 tools/test_android_ce_texture_cache.py
+          python3 tools/test_android_mirror_uploads.py
+          python3 tools/test_android_render_policy.py
+          python3 tools/test_android_static_geometry.py
+          python3 tools/test_controller_remap.py
+          python3 tools/test_controller_buttons.py
+
+  android:
+    needs: regressions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare native toolchain
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/tools"
+          curl -fsSL -o ninja.zip https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-linux.zip
+          curl -fsSL -o ccache.tar.xz https://github.com/ccache/ccache/releases/download/v4.10.2/ccache-4.10.2-linux-x86_64.tar.xz
+          sha256sum -c - <<'EOF'
+          6f98805688d19672bd699fbbfa2c2cf0fc054ac3df1f0e6a47664d963d530255  ninja.zip
+          80cab87bd510eca796467aee8e663c398239e0df1c4800a0b5dff11dca0b4f18  ccache.tar.xz
+          EOF
+          unzip -q ninja.zip -d "$RUNNER_TEMP/tools" && rm ninja.zip
+          tar -xJf ccache.tar.xz -C "$RUNNER_TEMP/tools" --strip-components=1 ccache-4.10.2-linux-x86_64/ccache && rm ccache.tar.xz
+          echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+      - uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-android-integration
+      - uses: actions/cache@v4
+        with:
+          path: build/android/third_party
+          key: android-third-party-integration
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-integration
+      - name: Android debug build
+        run: python3 tools/ci_build.py android debug
+      - name: Android release build
+        run: python3 tools/ci_build.py android release
+      - name: Verify packaged Android APK layout and legal files
+        run: |
+          set -euo pipefail
+          python3 tools/test_android_release_features.py
+          test -s dist/halo-android-release/app-release.apk
+          test -s dist/halo-android-release/FFmpeg-LGPL.txt
+          test -s dist/halo-android-release/bink-relink.zip
+          test -s dist/halo-android-release/opus-COPYING.txt
+          test -s dist/halo-android-release/lucide-LICENSE.txt
