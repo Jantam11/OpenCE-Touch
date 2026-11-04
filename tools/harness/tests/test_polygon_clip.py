@@ -13,23 +13,30 @@ from harness import CHECK_FAILED, build, constant, function, inline, mutated, re
 CASES = ["shared-corners-a", "shared-corners-b", "ordinary-clip"]
 
 # a fault and the case that must catch it
+# Historical portal captures are positive tests. Their rare 0/0 is not
+# reproducible on every compiler, so use a deterministic NaN injection to
+# prove the production corner guard is still required.
 NEGATIVE_CONTROLS = {
-    "nan-crossing": (("if (scale != scale) scale = 0.f;\n", ""), "shared-corners-a"),
-    "nan-crossing-b": (("if (scale != scale) scale = 0.f;\n", ""), "shared-corners-b"),
+    "nan-guard-removed": (("if (scale != scale) scale = 0.f;\n", ""), "nan-corner", True),
     "no-clip": (("result_count = convex_polygon2d_clip_to_plane(", "result_count = 0 * convex_polygon2d_clip_to_plane("),
-                "shared-corners-a"),
+                "shared-corners-a", False),
 }
 
 HELPERS = ["square_root", "magnitude_squared2d", "magnitude2d", "scale_vector2d", "normalize2d", "dot_product2d",
            "vector_from_points2d", "point_from_line2d", "plane2d_from_points", "plane2d_distance_to_point"]
 
 
-def generated(fault=None):
+def generated(fault=None, force_nan=False):
     real_math = read("source/math/real_math.h")
     geometry = read("source/math/geometry.c")
     code = "#define CLIP_BUFFER_SIZE %d\n" % constant(geometry, "CLIP_BUFFER_SIZE")
     code += "\n".join(inline(real_math, name) for name in HELPERS) + "\n"
-    code += "static " + function(geometry, "vector_intersect_plane2d") + "\n"
+    intersect = function(geometry, "vector_intersect_plane2d")
+    if force_nan:
+        # Simulate the floating-point 0/0 observed at real portal corners.
+        # Only the fixture's x=0 crossing is affected; clip code stays real.
+        intersect = mutated(intersect, "{\n\treturn", "{\n\tif (point->x == 0.f) return NAN;\n\treturn")
+    code += "static " + intersect + "\n"
     clip = "static " + function(geometry, "convex_polygon2d_clip_to_plane") + "\n"
     hull = "static " + function(geometry, "convex_hull2d_intersect") + "\n"
     if fault:
@@ -47,8 +54,13 @@ def test_case(case):
     assert status == 0, output
 
 
+def test_nan_guard_on_forced_degenerate_crossing():
+    status, output = run(build("polygon_clip", generated(force_nan=True)), "nan-corner")
+    assert status == 0, output
+
+
 @pytest.mark.parametrize("control", NEGATIVE_CONTROLS)
 def test_negative_control(control):
-    fault, case = NEGATIVE_CONTROLS[control]
-    status, output = run(build("polygon_clip", generated(fault)), case)
+    fault, case, force_nan = NEGATIVE_CONTROLS[control]
+    status, output = run(build("polygon_clip", generated(fault, force_nan=force_nan)), case)
     assert status == CHECK_FAILED, f"the clip with a fault ({control}) passed '{case}': the test cannot see it"

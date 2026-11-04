@@ -112,6 +112,29 @@ int main(int argc, char **argv)
 		check_intersection(region_b, 10, outline_b, 11);
 		return 0;
 	}
+	/* Force a rare 0/0 crossing through the extracted production helper.
+	   The test generator returns NAN only when the current point is x=0;
+	   the clipper must replace that crossing with the on-plane point. */
+	CASE("nan-corner")
+	{
+		real_point2d outline[4], result[CLIP_BUFFER_SIZE];
+		real_plane2d plane;
+		short count, index;
+
+		outline[0].x = -1.f; outline[0].y = -1.f;
+		outline[1].x =  0.f; outline[1].y =  1.f;
+		outline[2].x =  1.f; outline[2].y =  1.f;
+		outline[3].x =  1.f; outline[3].y = -1.f;
+		plane.n.i = 1.f; plane.n.j = 0.f; plane.d = 0.f;
+
+		count = convex_polygon2d_clip_to_plane(4, outline, &plane, 16, result, NULL, NULL, 0.0001f);
+		CHECK(count == 4, "%d corners from a clipped quadrilateral", count);
+		for (index = 0; index < count; index++)
+			CHECK(isfinite(result[index].x) && isfinite(result[index].y) && result[index].x >= 0.f,
+				"corner %d of %d is invalid (%g, %g)", index, count, result[index].x, result[index].y);
+		return 0;
+	}
+
 	/* an ordinary clip still clips: the square 0..2 by the line x = 1 keeps its half x >= 1 */
 	CASE("ordinary-clip")
 	{
