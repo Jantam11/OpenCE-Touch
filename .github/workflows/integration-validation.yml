@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: android-upstream-integration
+  cancel-in-progress: true
+
 jobs:
   regressions:
     runs-on: ubuntu-24.04
@@ -43,7 +47,6 @@ jobs:
           python3 tools/test_controller_buttons.py
 
   android:
-    needs: regressions
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
