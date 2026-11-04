@@ -127,6 +127,9 @@ int host_android_chip_family(void);
 
 /* the storage directories the port uses, copied into buffer */
 void host_android_path(int which, char *buffer, unsigned int size);
+/* HTTPS requests from the guest master-server browser. */
+int host_https_get(const char *url, int *status, char *headers, int headers_size,
+    char *body, int body_capacity, int *body_size, char *error, int error_size);
 
 
 void host_gesture_insets(int *insets);

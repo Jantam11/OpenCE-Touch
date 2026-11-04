@@ -57,6 +57,14 @@ void network_game_server_port_set_minimum_players(
 starts with none (network_test.c's host) */
 void network_game_server_port_clear_queued_players(
 	struct network_game_server *server);
+/* The dedicated server's lobby state and connected machines. */
+long network_game_server_port_countdown_milliseconds(struct network_game_server *server);
+boolean network_game_server_port_countdown_paused(struct network_game_server *server);
+void network_game_server_port_countdown_begin(struct network_game_server *server, long milliseconds);
+boolean network_game_server_port_start_sent(struct network_game_server *server);
+boolean network_game_server_port_ok_to_countdown(struct network_game_server *server);
+void network_game_server_port_forget_kicked_address(unsigned long address, char const *hardware_id);
+long network_game_server_port_remote_machine_count(struct network_game_server *server, boolean joined);
 /* port: the players a host's game holds (a variant with teams asks for
 one on each: server_needs_more_teams) */
 long network_game_server_port_player_count(

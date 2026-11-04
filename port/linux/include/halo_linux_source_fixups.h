@@ -109,6 +109,15 @@ void halo_draw_picture(const unsigned char *rgba, long width, long height);
 /* display.hdr's tone mapping of a window's 3D view, before its
 anti-aliasing (source/render/render.c) */
 void halo_screen_tone_map(short x0, short y0, short x1, short y1);
+/* Dedicated server and network settings, also used by Xbox source code. */
+unsigned long network_client_timeout_milliseconds(void);
+int halo_server_mode(void);
+void server_mode_start(void);
+void server_mode_pace_frame(void);
+void server_fatal(char const *text);
+void server_console_output(const char *text);
+int halo_server_debug_echo(void);
+char const *server_director_first_level(void);
 
 /* the mouse in the menus (source/interface/ui_widget.c) */
 #include "halo_ui_pointer.h"
