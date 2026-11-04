@@ -26,7 +26,7 @@ FUNCTIONS = (
     "countdown_timer_update", "countdown_timer_get_time_remaining", "countdown_timer_increment",
     "countdown_timer_decrement", "countdown_timer_set_time_remaining",
     "network_game_server_get_client_machine_count", "server_needs_more_teams",
-    "server_has_enough_machines", "server_players_on_one_machine", "server_ok_to_countdown",
+    "server_has_enough_machines", "server_players_on_one_machine", "server_has_a_player_on_each_machine", "server_ok_to_countdown",
     "network_game_server_update_countdown", "network_game_server_begin_game_start_countdown",
     "network_game_server_port_countdown_begin",
     "network_game_server_client_machine_faster_event",
