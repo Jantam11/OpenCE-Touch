@@ -275,11 +275,6 @@ BOOL platform_sdl_initialize(void)
 	controller emulation in xinput_sdl.c) */
 	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
 #endif
-	if (platform_dedicated())
-	{
-		SDL_SetHint(SDL_HINT_AUDIO_DRIVER, "dummy");
-		SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "dummy");
-	}
 #if defined(__linux__) && !defined(HALO_ANDROID)
 	/* input.playstation_kernel_driver: a PlayStation pad through the
 	kernel's driver of it (hid-playstation's, hid-sony's: its buttons,
@@ -295,8 +290,11 @@ BOOL platform_sdl_initialize(void)
 			SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS4, "0");
 	}
 #endif
-
-	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD | SDL_INIT_EVENTS))
+#if !defined(HALO_ANDROID) && !defined(HALO_WEB)
+	/* a dedicated server (server_mode.c) runs where there is no display,
+	sound or controller (a service, a container): SDL's drivers that need
+	none, and its events alone */
+	if (halo_server_mode())
 	{
 		SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "dummy");
 		SDL_SetHint(SDL_HINT_AUDIO_DRIVER, "dummy");
