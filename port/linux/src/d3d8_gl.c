@@ -26,6 +26,7 @@ Conventions carried over from the Xbox:
 #include "sdl_platform.h"
 #include "halo_ui_pointer.h"
 #include "port_config.h"
+#include "posix.h"
 #ifdef HALO_ANDROID
 #include "../../android/guest/runtime/guest_host.h"
 #include "../../android/include/android_render_policy.h"
