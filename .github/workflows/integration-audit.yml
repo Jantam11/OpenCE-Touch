@@ -1,4 +1,5 @@
 name: Upstream integration merge audit
+# This audit changes no game code and creates no release.
 on:
   push:
     branches:
