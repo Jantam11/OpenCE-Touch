@@ -3584,6 +3584,15 @@ can join the game in progress. */
 boolean server_ok_to_countdown(
 	struct network_game_server *server)
 {
+	/* Dedicated lobbies have no local player and must obey the director's
+	   minimum-player, team and lifecycle rules. Preserve upstream behavior;
+	   the solo-host exception below is for client-hosted lobbies only. */
+	if (halo_server_mode())
+	{
+		return server_has_enough_machines(server) &&
+			server_director_ok_to_countdown(server->game.player_count, server_needs_more_teams(server));
+	}
+
 	boolean enough_machines = server_has_enough_machines(server);
 	boolean a_player_on_each = server_has_a_player_on_each_machine(server);
 	boolean alone = server_players_on_one_machine(server);

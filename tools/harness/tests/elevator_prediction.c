@@ -169,7 +169,10 @@ static void ride(long elevator_index, real rise, long round_trip)
 		distributed_predictions[0].state.position.y = 0.0f;
 		distributed_predictions[0].state.position.z = floor - rise * (real)round_trip;
 		distributed_take_prediction(0, UNIT, &bound);
-		CHECK(objects[UNIT].object.position.x == client_x, "tick %ld: across at %f, not the client's %f", tick,
+		/* Both values are repeated float sums; representation can differ by
+		   an ULP on different 32-bit compilers without changing position. */
+		CHECK(fabsf(objects[UNIT].object.position.x - client_x) < 0.000001f,
+			"tick %ld: across at %f, not the client's %f", tick,
 			objects[UNIT].object.position.x, client_x);
 		CHECK(objects[UNIT].object.position.z >= floor - 0.001f,
 			"tick %ld: %f under the elevator's floor at %f, to fall through it", tick,
