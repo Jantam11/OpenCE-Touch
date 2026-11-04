@@ -865,7 +865,7 @@ static boolean director_update_controls(
 		unsigned long control_flags;
 		struct gamepad_state const *gamepad =
 			input_get_gamepad_state((short)player_index);
-		/* A 30 Hz input snapshot can be reused by several render frames. */
+		/* A 30 Hz snapshot may be reused by multiple draw frames. */
 		static boolean zoom_down[MAXIMUM_NUMBER_OF_LOCAL_PLAYERS];
 		boolean down = gamepad->buttons[_gamepad_binary_button_right_thumb] != 0;
 		boolean zoom_pressed = down && !zoom_down[local_player_index];
@@ -896,7 +896,9 @@ static boolean director_update_controls(
 			director->camera_proc !=
 				(director_camera_update_proc)following_camera_update)
 		{
-			if (zoom_pressed)
+			/* port: separate camera context, with stock input as the fallback. */
+			if (remapped ? (pad_pressed & (1u << PAD_CAMERA_SWITCH)) != 0 :
+				zoom_pressed)
 				director->debug_controls = !director->debug_controls;
 			/* port: the mouse takes priority; menus and chat retain their input. */
 			if (director->debug_controls && !middle &&
@@ -926,17 +928,12 @@ static boolean director_update_controls(
 					local_player_index,
 					control_flags,
 					controls->wheel_delta);
-				controls->facing_delta.yaw =
-					(real)gamepad->sticks[_gamepad_stick_right].x *
-						director_globals.dtime * -0.0000392699076f;
-				controls->facing_delta.pitch =
-					(real)gamepad->sticks[_gamepad_stick_right].y *
-						director_globals.dtime * 0.0000196349538f;
+				controls->facing_delta.yaw = facing.yaw;
+				controls->facing_delta.pitch = facing.pitch;
 #ifdef HALO_ANDROID
-				/* Consume direct swipe/gyro motion here while flying controls own
-				   facing; the inhibited player must not consume the same delta. */
-				if (local_player_index == 0) {
-					extern int halo_linux_mouse_look(short, real *, real *);
+				/* Keep the fork's swipe/gyro ownership with the flying camera. */
+				if (local_player_index == 0)
+				{
 					real yaw, pitch;
 					halo_linux_mouse_look(0, &yaw, &pitch);
 					controls->facing_delta.yaw += yaw;
@@ -1020,11 +1017,29 @@ static boolean director_update_controls(
 		real_vector2d throttle = player_control_port_debug_throttle[local_player_index];
 		real_euler_angles2d facing = player_control_port_debug_facing[local_player_index];
 
-#ifdef HALO_ANDROID
-	if (local_player_index == 0) {
-		extern int host_touch_camera_read(void);
-		if (host_touch_camera_read()) switch_camera = TRUE;
+		SET_FLAG(control_flags, _camera_control_up_bit, key_up);
+		SET_FLAG(control_flags, _camera_control_down_bit, key_down);
+		controls->wheel_delta = -(real)wheel;
+		director_process_variables(
+			local_player_index,
+			control_flags,
+			controls->wheel_delta);
+		controls->facing_delta.yaw = facing.yaw;
+		controls->facing_delta.pitch = facing.pitch;
+		controls->position_delta.i =
+			throttle.i * director->debug_input_scale * director_globals.dtime * 1.638f;
+		controls->position_delta.j =
+			throttle.j * director->debug_input_scale * director_globals.dtime * 1.638f;
+		controls->position_delta.k +=
+			director->debug_variables[_variable_height].delta;
+		controls->active = TRUE;
+		director_inhibit_input(local_player_index);
+		director_inhibit_facing(local_player_index);
 	}
+#ifdef HALO_ANDROID
+	/* Touch-screen camera cycling is still handled by the Android bridge. */
+	if (local_player_index == 0 && host_touch_camera_read())
+		switch_camera = TRUE;
 #endif
 	return switch_camera;
 }
