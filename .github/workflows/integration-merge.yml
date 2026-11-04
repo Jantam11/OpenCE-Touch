@@ -29,8 +29,17 @@ jobs:
           git fetch --no-tags upstream main
           want=899219cc0a14b03bc12f0517a1e9ee4c37158af8
           test "$(git rev-parse FETCH_HEAD)" = "$want"
-          git merge --no-ff -X ours -m "Merge OpenCE upstream 899219cc (Android and multiplayer integration candidate)" FETCH_HEAD
+          original="$(git rev-parse HEAD)"
+          git merge --no-ff -X ours -m "Prepare OpenCE 899219cc integration" FETCH_HEAD
           test -z "$(git ls-files -u)"
+          # A GitHub Actions job token cannot push new/changed workflow files.
+          # Restore our existing workflows before making a single-parent staging
+          # commit, then record true upstream ancestry using the GitHub connector.
+          git restore --source="$original" --staged --worktree -- .github/workflows
+          git commit -m "Keep OpenCE-Touch workflow security and Android release policy"
+          git reset --soft "$original"
+          git commit -m "Stage OpenCE upstream 899219cc game changes on isolated integration branch"
+          git diff --quiet "$original" HEAD -- .github/workflows
           grep -Eq '^[[:space:]]*#define HALO_PORT_NETWORK_VERSION 41' port/linux/include/halo_port_limits.h
           test -f port/android/app/src/main/java/com/halo/decomp/TouchRegions.java
           test -f tools/test_touch_regions.py
