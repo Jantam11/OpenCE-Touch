@@ -34,6 +34,7 @@ struct network_game_server_client_machine
 {
 	void *connection;
 	boolean joined;
+	short machine_index;
 };
 
 struct network_game_server
@@ -72,7 +73,8 @@ static boolean network_game_server_client_machine_is_joined_to_game(
 	return machine->joined;
 }
 static void network_game_server_countdown_started(struct network_game_server *s) { }
-static void network_event(char const *text) { }
+static void network_event(char const *text, ...) { }
+static boolean dedicated_server_active(void);
 
 /* a dedicated server (port/linux/game/server_director.c): its settings, and
 its director's state (test_lobby_countdown.py names it director: this
@@ -81,6 +83,7 @@ static int dedicated;
 static long dedicated_minimum_players = 1;
 static char const *dedicated_team_start = "one";
 static int halo_server_mode(void) { return dedicated; }
+static boolean dedicated_server_active(void) { return dedicated != 0; }
 static long config_integer(char const *name)
 {
 	return !strcmp(name, "server.min_players") ? dedicated_minimum_players : 0;
@@ -108,6 +111,7 @@ static void join_machine(
 	short machine_index)
 {
 	server.client_machines[machine_index].connection = &connection;
+	server.client_machines[machine_index].machine_index = machine_index;
 	server.client_machines[machine_index].joined = TRUE;
 }
 
