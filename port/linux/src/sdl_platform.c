@@ -2748,6 +2748,7 @@ void platform_video_window_size(int *width, int *height)
 
 /* ---------- the system's on-screen keyboard */
 
+#ifndef HALO_ANDROID
 /* A menu's text field is typed into (platform_text_field, xinput_sdl.c).
 Where Steam's on-screen keyboard is there to bring up (in Big Picture and in
 the Steam Deck's Game Mode, which ask for it with
@@ -2822,6 +2823,55 @@ static void screen_keyboard_update(void)
 		SDL_DestroyProperties(properties);
 	}
 }
+#else /* HALO_ANDROID */
+/* The 32-bit Android guest has no SDL text-input or atomic functions.
+   Transfer each field request to the Android host's existing SDL text-input
+   bridge, from the same thread that pumps SDL events. The guest and host
+   share neither SDL objects nor their pointer representations. */
+int host_sdl_text_input(unsigned int window, int type);
+
+static pthread_mutex_t screen_keyboard_lock = PTHREAD_MUTEX_INITIALIZER;
+static int screen_keyboard_wanted;
+static unsigned int screen_keyboard_requests;
+
+void platform_screen_keyboard(BOOL show, BOOL password)
+{
+	pthread_mutex_lock(&screen_keyboard_lock);
+	screen_keyboard_wanted = !show ? 0 : password ? 2 : 1;
+	if (show)
+		screen_keyboard_requests++;
+	pthread_mutex_unlock(&screen_keyboard_lock);
+}
+
+static void screen_keyboard_update(void)
+{
+	static unsigned int requests_handled;
+	static int active;
+	int wanted;
+	unsigned int requests;
+
+	pthread_mutex_lock(&screen_keyboard_lock);
+	wanted = screen_keyboard_wanted;
+	requests = screen_keyboard_requests;
+	pthread_mutex_unlock(&screen_keyboard_lock);
+	if (!platform_window)
+		return;
+	if (!wanted)
+	{
+		if (active)
+			host_sdl_text_input((unsigned int)platform_window, -1);
+		active = 0;
+		requests_handled = requests;
+		return;
+	}
+	if (wanted != active || requests != requests_handled)
+	{
+		requests_handled = requests;
+		active = host_sdl_text_input((unsigned int)platform_window,
+			wanted == 2 ? SDL_TEXTINPUT_TYPE_TEXT_PASSWORD_HIDDEN : SDL_TEXTINPUT_TYPE_TEXT) ? wanted : 0;
+	}
+}
+#endif /* HALO_ANDROID */
 void platform_input_read(struct platform_input_state *state, BOOL consume_motion)
 {
 	pthread_mutex_lock(&input_lock);

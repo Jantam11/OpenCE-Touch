@@ -225,18 +225,33 @@ void touch_input_gamepad(XINPUT_GAMEPAD *pad)
 }
 
 #if defined(HALO_ANDROID) && defined(HALO_TOUCH_SDL_GAMEPAD)
-/* The SDL-gamepad overlay is rendered by the Android host, rather than the
-   legacy guest touch controls. Keep the postgame prompt's visibility policy
-   available in this build configuration too. */
+#include <SDL3/SDL.h>
+/* The host's SDL virtual gamepad is the touchscreen. The guest can inspect
+   gamepads through its existing SDL bridge; host_touch_devices belongs only
+   to upstream's different native overlay and is not an imported function. */
 int touch_input_screen_buttons(void)
 {
-    const char *setting = config_string("input.touch_controls");
-    int devices = host_touch_devices();
-    enum { TOUCHSCREEN = 1, CONTROLLER = 2 };
+	const char *setting = config_string("input.touch_controls");
+	SDL_JoystickID *gamepads;
+	int count = 0, index;
+	int physical_controller = FALSE;
 
-    if (!(devices & TOUCHSCREEN) || (setting && !strcmp(setting, "off")))
-        return FALSE;
-    return (setting && !strcmp(setting, "on")) || !(devices & CONTROLLER);
+	if (setting && !strcmp(setting, "off"))
+		return FALSE;
+	if (setting && !strcmp(setting, "on"))
+		return TRUE;
+
+	gamepads = SDL_GetGamepads(&count);
+	for (index = 0; gamepads && index < count; index++)
+	{
+		if (!SDL_IsJoystickVirtual(gamepads[index]))
+		{
+			physical_controller = TRUE;
+			break;
+		}
+	}
+	SDL_free(gamepads);
+	return !physical_controller;
 }
 #endif
 
