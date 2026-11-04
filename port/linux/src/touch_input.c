@@ -224,6 +224,22 @@ void touch_input_gamepad(XINPUT_GAMEPAD *pad)
 	}
 }
 
+#if defined(HALO_ANDROID) && defined(HALO_TOUCH_SDL_GAMEPAD)
+/* The SDL-gamepad overlay is rendered by the Android host, rather than the
+   legacy guest touch controls. Keep the postgame prompt's visibility policy
+   available in this build configuration too. */
+int touch_input_screen_buttons(void)
+{
+    const char *setting = config_string("input.touch_controls");
+    int devices = host_touch_devices();
+    enum { TOUCHSCREEN = 1, CONTROLLER = 2 };
+
+    if (!(devices & TOUCHSCREEN) || (setting && !strcmp(setting, "off")))
+        return FALSE;
+    return (setting && !strcmp(setting, "on")) || !(devices & CONTROLLER);
+}
+#endif
+
 #if defined(HALO_ANDROID) && !defined(HALO_TOUCH_SDL_GAMEPAD)
 /* ---------- the on-screen touch controls
 
