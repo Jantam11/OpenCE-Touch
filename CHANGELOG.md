@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.4-touch — 2026-11-04
+
+- Updated the original OpenCE engine through upstream commit [899219c](https://github.com/OpenCommunityEdition/OpenCE/commit/899219cc0a14b03bc12f0517a1e9ee4c37158af8). **Multiplayer protocol 41** replaces protocol 32; older OpenCE-Touch builds cannot join servers using the newer protocol.
+- Added Android resolution scaling (original, 25%, 50%, 75%, native), frame-rate controls, compatible GPU texture/rendering optimizations, and new graphics diagnostic options.
+- Integrated upstream co-op checkpoints, server/gameplay and network security fixes, better HUD and Custom Edition rendering, and Android text-entry/postgame improvements.
+- Added OpenCE's SWAT, Infection, Gun Game and Hardcore gametypes, expanded bot skill levels, controller recognition/remapping, more split-screen options and multiplayer voting improvements.
+- Retained the fork's **editable Android controls**, optional Xash-style screen regions, gyroscope, custom layout imports/presets, HUD editor, themes, disc/movie features and Android-only release packaging. Added **General settings → Fire button drag aiming**, enabled by default as before; it can be turned off and is included in layout exports.
+- Fixed integration conflicts involving touch/free-camera routing, SDL/controller initialization, Android rendering declarations, master-server HTTPS access, dedicated co-op flags and menu registration.
+
+**Compatibility and testing:** The network format/version declarations match OpenCE protocol 41, but no physical Android gameplay or live multiplayer server interoperability has been verified here. Do not assume older clients are compatible. Back up saves and layouts before installing; a temporary CI signing key may require uninstalling the old APK. The project uses the existing Android CI test/build/release gates before publication.
+
+**Credits:** [OpenCE contributors](https://github.com/OpenCommunityEdition/OpenCE) for upstream changes; [Xash3D-FWGS contributors](https://github.com/FWGS/xash3d-fwgs), [FulGerNet/theLlamaNet](https://github.com/FulGerNet/halo-ce-android), fqlx and prior credited contributors for features retained from earlier OpenCE-Touch versions.
+
+[Changes since v0.6.3](https://github.com/Jantam11/OpenCE-Touch/compare/v0.6.3-touch...touch-controls)
+
 ## 0.6.3-touch — 2026-10-22
 
 - Added an **experimental Xash-style touch control system** with adjustable movement/look screen regions. Enable it in **OPTIONS → Control system → Xash-style screen regions**.
