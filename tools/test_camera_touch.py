@@ -49,7 +49,7 @@ static int simulate_consumption,look_pending;static real look_scale=1,player_yaw
 static real_vector2d player_control_port_debug_throttle[MAXIMUM_NUMBER_OF_LOCAL_PLAYERS];
 static real_euler_angles2d player_control_port_debug_facing[MAXIMUM_NUMBER_OF_LOCAL_PLAYERS];
 int passenger_camera_enabled(short i){return FALSE;}
-void first_person_camera_update(void){}void following_camera_update(void){}void flying_camera_update(void){}
+void first_person_camera_update(void){}void following_camera_update(void){}void flying_camera_update(void){}void editor_camera_update(void){}void orbiting_camera_update(void){}
 struct director*director_get(short i){return &d;}
 int local_player_get_player_index(short i){return i;}
 struct player_datum*player_get(int i){return &player;}
