@@ -2746,7 +2746,6 @@ void platform_video_window_size(int *width, int *height)
 #endif
 }
 
-#ifndef HALO_ANDROID
 /* ---------- the system's on-screen keyboard */
 
 /* A menu's text field is typed into (platform_text_field, xinput_sdl.c).
@@ -2823,7 +2822,6 @@ static void screen_keyboard_update(void)
 		SDL_DestroyProperties(properties);
 	}
 }
-#endif
 void platform_input_read(struct platform_input_state *state, BOOL consume_motion)
 {
 	pthread_mutex_lock(&input_lock);
