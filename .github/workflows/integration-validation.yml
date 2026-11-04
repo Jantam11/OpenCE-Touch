@@ -8,10 +8,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: android-upstream-integration
-  cancel-in-progress: true
-
 jobs:
   regressions:
     runs-on: ubuntu-24.04
