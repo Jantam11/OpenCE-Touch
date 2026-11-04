@@ -8,6 +8,12 @@ on:
 permissions:
   contents: read
 
+# Only the newest source candidate needs costly native and regression jobs.
+# This workflow never uploads GitHub Actions artifacts.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   regressions:
     runs-on: ubuntu-24.04

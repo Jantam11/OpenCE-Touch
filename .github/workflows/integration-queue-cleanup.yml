@@ -3,8 +3,6 @@ on:
   push:
     branches:
       - integration/upstream-2026-11-04
-    paths:
-      - .github/workflows/integration-queue-cleanup.yml
 permissions:
   actions: write
   contents: read
