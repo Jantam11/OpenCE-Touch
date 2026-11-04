@@ -69,17 +69,20 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: .ccache
-          key: ccache-android-integration
+          key: ccache-android-integration-${{ github.sha }}
+          restore-keys: ccache-android-
       - uses: actions/cache@v4
         with:
           path: build/android/third_party
-          key: android-third-party-integration
+          key: android-third-party-${{ hashFiles('tools/android_build.py', 'tools/build_android_bink.py', 'port/android/patches/**') }}
+          restore-keys: android-third-party-
       - uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: gradle-integration
+          key: gradle-${{ hashFiles('port/android/**/*.gradle*', 'port/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-
       - name: Android debug build
         run: python3 tools/ci_build.py android debug
       - name: Android release build
