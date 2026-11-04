@@ -28,6 +28,7 @@ Conventions carried over from the Xbox:
 #include "port_config.h"
 #ifdef HALO_ANDROID
 #include "../../android/guest/runtime/guest_host.h"
+#include "../../android/include/android_render_policy.h"
 #endif
 #include "main/console.h"
 #ifndef HALO_ANDROID
