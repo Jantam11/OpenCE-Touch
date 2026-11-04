@@ -88,6 +88,7 @@ their handlers open opens.
 #include "custom_edition_maps.h"
 #include "game_modes.h"
 #include "network_voice.h"
+#include "network_map_vote.h"
 #include "overlay_screens.h"
 #include "text/draw_string.h"
 /* (internet play's server browser: the platform layer's) */
