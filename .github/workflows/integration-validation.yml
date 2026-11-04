@@ -21,6 +21,8 @@ jobs:
       - name: Source and platform regression suite
         run: |
           set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y -q gcc-multilib
           python3 -m pip install -q pytest
           grep -Eq '^[[:space:]]*#define HALO_PORT_NETWORK_VERSION 41' port/linux/include/halo_port_limits.h
           test -f port/android/app/src/main/java/com/halo/decomp/TouchRegions.java
