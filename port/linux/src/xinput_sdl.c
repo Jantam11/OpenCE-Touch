@@ -124,7 +124,9 @@ the touch controls (their swipe, gyroscope or stick: halo_linux_mouse_aiming,
 halo_linux_touch_aiming) */
 static Uint64 mouse_aimed_ms = 0;
 static Uint64 stick_aimed_ms = 0;
-#if defined(HALO_ANDROID) && !defined(HALO_TOUCH_SDL_GAMEPAD)
+/* Track the active input device per local player. */
+static Uint64 pad_used_ms = 0, keyboard_used_ms = 0;
+#if (defined(HALO_ANDROID) && !defined(HALO_TOUCH_SDL_GAMEPAD)) || defined(HALO_WEB)
 static Uint64 touch_aimed_ms = 0;
 #endif
 
@@ -186,7 +188,7 @@ int halo_linux_mouse_look(short gamepad_index, float *yaw, float *pitch)
 	return TRUE;
 }
 
-#if defined(HALO_ANDROID) && !defined(HALO_TOUCH_SDL_GAMEPAD)
+#if (defined(HALO_ANDROID) && !defined(HALO_TOUCH_SDL_GAMEPAD)) || defined(HALO_WEB)
 /* the touch controls moved the player or the aim (halo_linux_touch_aiming) */
 static void touch_used(void)
 {
@@ -200,6 +202,7 @@ static void touch_used(void)
 
 /* Each controller's buttons, before the on-screen keyboard consumes them. */
 static unsigned long chat_pad[PORT_COUNT], chat_physical_pad[PORT_COUNT];
+extern short network_chat_controller(void);
 
 static void chat_pad_record(short port, const XINPUT_GAMEPAD *pad)
 {
@@ -220,10 +223,15 @@ static void chat_pad_record(short port, const XINPUT_GAMEPAD *pad)
 	if (pad->sThumbLY < -PUSHED) buttons |= 1UL << HALO_CHAT_PAD_STICK_DOWN;
 	if (pad->sThumbLX < -PUSHED) buttons |= 1UL << HALO_CHAT_PAD_STICK_LEFT;
 	if (pad->sThumbLX > PUSHED) buttons |= 1UL << HALO_CHAT_PAD_STICK_RIGHT;
-	chat_pad = buttons;
+	chat_pad[port] = buttons;
 #if defined(HALO_ANDROID) && defined(HALO_TOUCH_SDL_GAMEPAD)
     SDL_SetHint("OPEN_CE_TOUCH_CHAT", network_chat_keyboard_open() ? "1" : "0");
 #endif
+}
+
+unsigned long halo_chat_pad_buttons_for_port(short port)
+{
+	return port >= 0 && port < PORT_COUNT ? chat_physical_pad[port] : 0;
 }
 
 unsigned long halo_chat_pad_buttons(void)
