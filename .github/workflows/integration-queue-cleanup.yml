@@ -1,0 +1,30 @@
+name: Clear obsolete integration test runs
+on:
+  push:
+    branches:
+      - integration/upstream-2026-11-04
+    paths:
+      - .github/workflows/integration-queue-cleanup.yml
+permissions:
+  actions: write
+  contents: read
+jobs:
+  clear-obsolete-runs:
+    if: github.repository == 'Jantam11/OpenCE-Touch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Cancel superseded integration-only CI runs
+        env:
+          GH_TOKEN: \${{ github.token }}
+          GH_REPO: \${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Only this temp branch's validation; never alter public releases.
+          gh api "repos/$GH_REPO/actions/runs?branch=integration/upstream-2026-11-04&per_page=100" \
+            --jq '.workflow_runs[] | select(.name == "Validate OpenCE Android integration") | select(.head_sha != env.GITHUB_SHA) | select(.status == "queued" or .status == "pending" or .status == "in_progress") | .id' |
+          while read -r id; do
+            echo "Canceling superseded integration validation $id"
+            gh api -X POST "repos/$GH_REPO/actions/runs/$id/cancel" >/dev/null || true
+          done
