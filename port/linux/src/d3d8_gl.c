@@ -2484,7 +2484,7 @@ static void gl_initialize(void)
 				(strcmp(decode, "gpu") && renderer && strstr(renderer, "Adreno")))
 				xgpu_capabilities.s3tc = FALSE;
 		}
-		platform_log("OpenGL ES %d.%d: copy image %d, border clamp %d, anisotropy %d, S3TC %d, sample counting %d, "
+		platform_log("OpenGL ES %d.%d: copy image %d, border clamp %d, anisotropy %d, S3TC %d, ASTC %d, atomic counters %d, "
 			"base vertex %d (%s), half float targets %d",
 			(int)major, (int)minor, xgpu_capabilities.copy_image, xgpu_capabilities.border_clamp,
 			xgpu_capabilities.anisotropy, xgpu_capabilities.s3tc, xgpu_capabilities.astc, xgpu_capabilities.atomic_counters,
