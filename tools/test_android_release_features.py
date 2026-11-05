@@ -1,5 +1,6 @@
 """Production display options: defaults, bounds and no delay on a network game."""
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 from harness import function
@@ -7,6 +8,18 @@ from harness import function
 ROOT = Path(__file__).resolve().parents[1]
 
 def main():
+    # A missing printf conversion made the Android GLES start-up logger
+    # interpret the integer base_vertex=1 as a %s pointer and SIGSEGV at 0x1.
+    renderer = (ROOT / 'port/linux/src/d3d8_gl.c').read_text()
+    begin = renderer.index('platform_log("OpenGL ES %d.%d:')
+    end = renderer.index(');', begin)
+    call = renderer[begin:end]
+    fmt = ''.join(re.findall(r'"([^"]*)"', call))
+    conversions = re.findall(r'%([ds])', fmt)
+    arguments = [arg.strip() for arg in call.split('",', 1)[1].split(',')]
+    assert len(conversions) == len(arguments), (conversions, arguments)
+    assert conversions == ['d'] * 9 + ['s', 'd'], conversions
+    assert arguments[9] == 'base_vertex_source', arguments
     source = (ROOT / 'source/main/main.c').read_text()
     game = (ROOT / 'source/game/game.c').read_text()
     timers = (ROOT / 'port/linux/game/powerup_timers.c').read_text()
