@@ -20,6 +20,8 @@ player_poll='void poll_player_look(void){short local_player_index=0,gamepad_inde
 code=r'''
 #define HALO_ANDROID 1
 typedef int boolean;typedef unsigned char byte;typedef float real;
+typedef struct{real i,j;} real_vector2d;
+typedef struct{real yaw,pitch;} real_euler_angles2d;
 #define FALSE 0
 #define TRUE 1
 #define NONE (-1)
@@ -29,6 +31,7 @@ typedef int boolean;typedef unsigned char byte;typedef float real;
 #define SET_FLAG(v,b,on) do{if(on)(v)|=1u<<(b);else(v)&=~(1u<<(b));}while(0)
 enum{_gamepad_analog_button_black,_gamepad_binary_button_right_thumb,_gamepad_analog_button_right_trigger,_gamepad_analog_button_left_trigger,_gamepad_binary_button_dpad_up,_gamepad_binary_button_dpad_down};
 enum{_gamepad_stick_left,_gamepad_stick_right};
+enum{PAD_CAMERA_SWITCH,PAD_CAMERA_UP,PAD_CAMERA_DOWN,PAD_CAMERA_FASTER,PAD_CAMERA_SLOWER};
 enum{_camera_control_forward_bit,_camera_control_reverse_bit,_camera_control_left_bit,_camera_control_right_bit,_camera_control_up_bit,_camera_control_down_bit,_camera_control_roll_left_bit,_camera_control_roll_right_bit};
 enum{_variable_height,_variable_roll,_variable_forward,_variable_right};
 enum{_key_backspace,_key_tab,_key_w,_key_s,_key_a,_key_d,_key_r,_key_f,_key_t,_key_g};
@@ -43,12 +46,17 @@ static struct{real dtime;}director_globals;
 static boolean director_camera_switch_fast;
 static int pending,look_calls,inhibited,facing_inhibited;
 static int simulate_consumption,look_pending;static real look_scale=1,player_yaw,player_pitch;
+static real_vector2d player_control_port_debug_throttle[MAXIMUM_NUMBER_OF_LOCAL_PLAYERS];
+static real_euler_angles2d player_control_port_debug_facing[MAXIMUM_NUMBER_OF_LOCAL_PLAYERS];
 int passenger_camera_enabled(short i){return FALSE;}
-void first_person_camera_update(void){}void following_camera_update(void){}void flying_camera_update(void){}
+void first_person_camera_update(void){}void following_camera_update(void){}void flying_camera_update(void){}void editor_camera_update(void){}void orbiting_camera_update(void){}
 struct director*director_get(short i){return &d;}
 int local_player_get_player_index(short i){return i;}
 struct player_datum*player_get(int i){return &player;}
 int input_has_gamepad(short i){return TRUE;}
+int controller_remap_camera(short i,int available,int active,unsigned int*held,unsigned int*pressed){(void)i;(void)available;(void)active;*held=*pressed=0;return FALSE;}
+int controller_remap_playing(short i){(void)i;return TRUE;}
+void halo_linux_debug_camera_input(int*middle,int*up,int*down,float*wheel){*middle=*up=*down=0;*wheel=0;}
 const struct gamepad_state*input_get_gamepad_state(short i){return &pad;}
 const struct mouse_state*input_get_mouse_state(void){return NULL;}
 int input_key_is_down(int key){return FALSE;}
@@ -70,6 +78,7 @@ int run_tests(void){
  if(director_update_controls(0,&controls))return 2;
  d.camera_proc=flying_camera_update;pad.buttons[_gamepad_binary_button_right_thumb]=1;
  pad.sticks[_gamepad_stick_left].y=16000;
+ player_control_port_debug_throttle[0].i=16000.f * 0.00005f / 1.638f;
  if(director_update_controls(0,&controls)||!d.debug_controls||!controls.active||look_calls!=1)return 3;
  if(controls.facing_delta.yaw!=-0.22f||controls.facing_delta.pitch!=0.11f||controls.position_delta.i<=0||!inhibited||!facing_inhibited)return 4;
  director_update_controls(0,&controls);

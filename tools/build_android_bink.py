@@ -30,7 +30,25 @@ def main():
     cc=tool/"aarch64-linux-android28-clang"
     cache=ROOT/"build/android/third_party";cache.mkdir(parents=True,exist_ok=True)
     archive=cache/f"ffmpeg-{VERSION}.tar.xz"
-    if not archive.exists(): urllib.request.urlretrieve(SOURCE_URL,archive)
+    if not archive.exists():
+        # The primary source can temporarily time out on hosted CI runners.
+        # A mirror is acceptable only when its bytes match the pinned SHA256.
+        urls = (SOURCE_URL,
+                f"https://www.ffmpeg.org/releases/ffmpeg-{VERSION}.tar.xz",
+                f"https://fossies.org/linux/misc/ffmpeg-{VERSION}.tar.xz")
+        for url in urls:
+            try:
+                request = urllib.request.Request(url, headers={"User-Agent": "OpenCE-Touch source builder"})
+                with urllib.request.urlopen(request, timeout=35) as response, archive.open("wb") as output:
+                    shutil.copyfileobj(response, output)
+                if hashlib.sha256(archive.read_bytes()).hexdigest() == SHA256:
+                    break
+                raise RuntimeError("source checksum does not match")
+            except (OSError, RuntimeError, urllib.error.URLError) as error:
+                print(f"FFmpeg source unavailable from {url}: {error}", flush=True)
+                archive.unlink(missing_ok=True)
+        else:
+            raise RuntimeError("Pinned FFmpeg source could not be downloaded or verified")
     if hashlib.sha256(archive.read_bytes()).hexdigest()!=SHA256: raise RuntimeError("FFmpeg archive checksum mismatch")
     source=cache/f"ffmpeg-{VERSION}"
     if not source.is_dir():

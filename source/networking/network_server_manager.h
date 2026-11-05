@@ -57,6 +57,14 @@ void network_game_server_port_set_minimum_players(
 starts with none (network_test.c's host) */
 void network_game_server_port_clear_queued_players(
 	struct network_game_server *server);
+/* The dedicated server's lobby state and connected machines. */
+long network_game_server_port_countdown_milliseconds(struct network_game_server *server);
+boolean network_game_server_port_countdown_paused(struct network_game_server *server);
+void network_game_server_port_countdown_begin(struct network_game_server *server, long milliseconds);
+boolean network_game_server_port_start_sent(struct network_game_server *server);
+boolean network_game_server_port_ok_to_countdown(struct network_game_server *server);
+void network_game_server_port_forget_kicked_address(unsigned long address, char const *hardware_id);
+long network_game_server_port_remote_machine_count(struct network_game_server *server, boolean joined);
 /* port: the players a host's game holds (a variant with teams asks for
 one on each: server_needs_more_teams) */
 long network_game_server_port_player_count(
@@ -77,6 +85,7 @@ void network_game_server_kick_machine(
 	boolean kept_out);
 /* port: the rejection code of the last machine
 network_game_server_accept_client_machine_into_game refused */
+void network_game_server_refuse_with(short code);
 short network_game_server_last_refusal_code(
 	void);
 /* the host's ban command (console.c, hs.c) */
@@ -105,8 +114,15 @@ void network_game_server_port_set_cooperative_friendly_fire(
 	short friendly_fire);
 /* port: whether co-op's players collide with each other (Server Setup's
 PLAYER COLLISIONS), kept for the levels after */
+/* port: the co-op flag that says the host is a dedicated server */
+void network_game_server_port_set_cooperative_dedicated(
+	boolean dedicated);
 void network_game_server_port_set_cooperative_player_collisions(
 	boolean player_collisions);
+/* port: whether co-op's players hurt their AI allies (Server Setup's ALLY
+FRIENDLY FIRE), kept for the levels after */
+void network_game_server_port_set_cooperative_ally_friendly_fire(
+	boolean ally_friendly_fire);
 boolean network_game_server_ban_player(
 	char const *text);
 /* port: the host's kick command: as the ban command, but nothing kept (no

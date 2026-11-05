@@ -27,6 +27,9 @@ void host_touch_rumble(unsigned int low, unsigned int high);
 void host_touch_scene(int scene);
 void host_touch_bindings(const int *controls);
 #endif
+#ifdef HALO_ANDROID
+int host_touch_devices(void);
+#endif
 
 /* the game's (port/linux/game/touch_game.c) */
 int touch_game_cinematic_skippable(void);
@@ -171,7 +174,7 @@ void touch_input_menu_read(struct platform_ui_pointer *pointer)
 
 /* port/linux/game/network_chat.c: its on-screen keyboard is up, which
 takes the taps outside the menus */
-extern unsigned char network_chat_keyboard_open(void);
+extern short network_chat_controller(void);
 
 /* the taps for that keyboard since it last took them, and the latest's
 place (0 to 1 of the window) */
@@ -199,7 +202,7 @@ void touch_input_gamepad(XINPUT_GAMEPAD *pad)
 		menu_setup();
 		touch_menu_read(&menu, &output);
 		/* (or, while the text chat's on-screen keyboard is up, its keys) */
-		if (output.clicks && network_chat_keyboard_open())
+		if (output.clicks && (network_chat_controller() == 0))
 		{
 			int width = 0, height = 0;
 
@@ -220,6 +223,37 @@ void touch_input_gamepad(XINPUT_GAMEPAD *pad)
 		skip_polls--;
 	}
 }
+
+#if defined(HALO_ANDROID) && defined(HALO_TOUCH_SDL_GAMEPAD)
+#include <SDL3/SDL.h>
+/* The host's SDL virtual gamepad is the touchscreen. The guest can inspect
+   gamepads through its existing SDL bridge; host_touch_devices belongs only
+   to upstream's different native overlay and is not an imported function. */
+int touch_input_screen_buttons(void)
+{
+	const char *setting = config_string("input.touch_controls");
+	SDL_JoystickID *gamepads;
+	int count = 0, index;
+	int physical_controller = FALSE;
+
+	if (setting && !strcmp(setting, "off"))
+		return FALSE;
+	if (setting && !strcmp(setting, "on"))
+		return TRUE;
+
+	gamepads = SDL_GetGamepads(&count);
+	for (index = 0; gamepads && index < count; index++)
+	{
+		if (!SDL_IsJoystickVirtual(gamepads[index]))
+		{
+			physical_controller = TRUE;
+			break;
+		}
+	}
+	SDL_free(gamepads);
+	return !physical_controller;
+}
+#endif
 
 #if defined(HALO_ANDROID) && !defined(HALO_TOUCH_SDL_GAMEPAD)
 /* ---------- the on-screen touch controls
@@ -264,6 +298,24 @@ static int touch_controls_setting(void)
 	return setting;
 }
 
+#ifdef HALO_ANDROID
+/* the overlay's devices (port/android/host/host_touch.c's
+HOST_TOUCH_DEVICE_*) */
+#define TOUCH_DEVICE_TOUCHSCREEN 1
+#define TOUCH_DEVICE_CONTROLLER 2
+
+int touch_input_screen_buttons(void)
+{
+	int devices = host_touch_devices();
+	int setting = touch_controls_setting();
+
+	/* (TouchControls.java's shown(), but for the scene) */
+	if (setting == _touch_scene_off || !(devices & TOUCH_DEVICE_TOUCHSCREEN))
+		return FALSE;
+	return setting == _touch_scene_on || !(devices & TOUCH_DEVICE_CONTROLLER);
+}
+#endif
+
 void touch_input_controls(XINPUT_GAMEPAD *pad, int menus)
 {
 	/* SDL's gamepad buttons, in order (SDL_GamepadButton); the first four
@@ -289,7 +341,7 @@ void touch_input_controls(XINPUT_GAMEPAD *pad, int menus)
 	menu, in a menu or during a cinematic; nor while the text chat's
 	on-screen keyboard is up, whose keys the fingers then tap) */
 	host_touch_scene(_touch_scene_known | touch_controls_setting() |
-		(menus || !touch_game_playing() || touch_game_cinematic_playing() || network_chat_keyboard_open() ?
+		(menus || !touch_game_playing() || touch_game_cinematic_playing() || (network_chat_controller() == 0) ?
 			_touch_scene_menus : 0));
 	/* (the profile's mapping, for the buttons' names; only when it changes) */
 	touch_game_button_controls(bindings);

@@ -16,7 +16,7 @@ final class TouchConfiguration {
     final ArrayList<Button> buttons = new ArrayList<>();
     float sensitivity = 1.8f, gyroSensitivity = 1f, fov = 70f;
     boolean gyro, rumble = true, fps, icons = true, overlayDisabled;
-    boolean screenRegions, moveRight;
+    boolean screenRegions, moveRight, fireDragAim = true;
     float regionSplit = .5f, sideZone = .06f, forwardZone = .06f;
 
     /** fqlx's compact web layout, adapted to our native SDL virtual gamepad. */
@@ -73,6 +73,7 @@ final class TouchConfiguration {
         p.setProperty("region-split", Float.toString(regionSplit));
         p.setProperty("region-side-zone", Float.toString(sideZone));
         p.setProperty("region-forward-zone", Float.toString(forwardZone));
+        p.setProperty("fire-drag-aim", Boolean.toString(fireDragAim));
         for (int i = 0; i < buttons.size(); i++) {
             Button b = buttons.get(i); String k = "control." + i + ".";
             p.setProperty(k+"id", b.id); p.setProperty(k+"label", b.label);
@@ -101,6 +102,8 @@ final class TouchConfiguration {
         c.gyro = bool(p,"gyroscope",false); c.rumble = bool(p,"rumble",true);
         c.fps = bool(p,"fps-counter",false); c.icons = bool(p,"icons",true);
         c.overlayDisabled = bool(p,"overlay-disabled",false);
+        // Older layouts retain fire-drag aiming; upstream v4 button preference is accepted.
+        c.fireDragAim = bool(p, llama && version.equals("4") ? "buttons-aim" : "fire-drag-aim", true);
         // Foreign/older layouts retain the original pad behaviour.
         if (!llama) {
             c.screenRegions = bool(p,"screen-regions",false);

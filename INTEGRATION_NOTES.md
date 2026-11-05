@@ -1,3 +1,36 @@
+# 2026-11-05 — protocol-41 verification follow-up
+
+The previous candidate commit `2e1b303` passed [Android integration CI 41884842427](https://github.com/Jantam11/OpenCE-Touch/actions/runs/41884842427): Android debug and release builds, APK/license checks, and 1518 regression cases (5 skipped, 7 subtests). OpenCE upstream `main` remains at `899219cc` (November 1). The fork's `network_format.txt` blob exactly matches upstream main at that pinned commit.
+
+The isolated branch now adds explicit CI checks that the production network wire-format snapshot still matches protocol 41, and compiles/tests the Android host's HTTPS master-list response bridge against a deterministic fake transport, including signed-response headers, JSON body, status and TLS failure handling. This test uses no game assets and never makes live network requests.
+
+**Validation boundary:** These new checks require a clean CI rerun on their own final commit. Neither CI nor equal protocol versions demonstrate Android-to-upstream live multiplayer compatibility. Before merging/publishing, still test a signed debug/release APK on the actual phone: default and Xash region controls, firing/drag aim, gyro, menus/chat, profile creation, map import, renderer and movies; then direct-host and dedicated-server joins against an upstream protocol-41 build, co-op progression, game modes, disconnect/reconnect, and voice if enabled. Record Android logcat and peer/server logs. Preserve `touch-controls`/v0.6.3-touch until validated.
+
+# 2026-11-04 — OpenCE main integration / candidate v0.6.4-touch
+
+Integration branch: `integration/upstream-2026-11-04`, draft PR #3. Upstream pinned at
+`899219cc0a14b03bc12f0517a1e9ee4c37158af8` (November 1).
+Current fork baseline v0.6.3-touch / `e3b2645d`.
+The full merge history is retained. Network format `HALO_PORT_NETWORK_VERSION=41`
+and `HALO_PORT_NETWORK_GAME_MESSAGE_VERSION=2` exactly match upstream main.
+This is not evidence of real multiplayer gameplay compatibility until
+networked hardware tests have passed.
+
+Preserve Android-only changes: SDL virtual controller rather than upstream
+native overlay, original movable pads, Xash-style regions, layout imports,
+gyroscope, camera/HUD editor, themes, movies, disk import, privacy menus,
+existing direct Android release workflow. Upstream controller/texture and
+networking functions require careful conflict repair; do not blindly use
+`-X ours` on them again. Added optional fire-button drag aiming (default
+ON, persists and exports), with test in `tools/test_android_mobile.py`.
+
+The CI gate is `.github/workflows/integration-validation.yml` (Android
+debug/release and regressions). Only advance `touch-controls` and use the
+existing `Build` direct publisher when those checks pass, preserving all
+license/relinking materials and no GitHub Actions artifact uploads. No
+physical phone or live multiplayer server tests were available. Full
+checks and release must not be represented as completed before CI confirms.
+
 # 2026-10-22 — optional Xash-style screen regions
 
 Source `d1782a5a` adds a selectable movement/look alternative after 0.6.2;

@@ -41,6 +41,11 @@ public class MobileCheck {
   require(!d.screenRegions && !d.moveRight && d.regionSplit==.5f && d.sideZone==.06f && d.forwardZone==.06f);
   c.screenRegions=true;c.moveRight=true;c.regionSplit=.35f;c.sideZone=.1f;c.forwardZone=.12f;
   String regionSaved=c.encode();TouchConfiguration regions=TouchConfiguration.decode(regionSaved);
+  require(regions.fireDragAim);
+  c.fireDragAim=false;
+  require(!TouchConfiguration.decode(c.encode()).fireDragAim);
+  rejects(c.encode().replace("fire-drag-aim=false","fire-drag-aim=unknown"));
+  c.fireDragAim=true;
   require(regions.screenRegions&&regions.moveRight&&regions.regionSplit==.35f&&regions.sideZone==.1f&&regions.forwardZone==.12f);
   rejects(regionSaved.replace("region-split=0.35","region-split=NaN"));
   rejects(regionSaved.replace("region-split=0.35","region-split=0.1"));
@@ -297,6 +302,11 @@ static int players_on_each = 1, needs_teams, precached, starts;
 static int network_game_server_client_machine_is_joined_to_game(struct network_game_server *s, struct network_game_server_client_machine *m) {(void)s;return m->joined;}
 static int server_has_a_player_on_each_machine(struct network_game_server *s) {(void)s;return players_on_each;}
 static int server_needs_more_teams(struct network_game_server *s) {(void)s;return needs_teams;}
+/* This fixture exercises a player-hosted lobby; the separate 32-bit
+   countdown harness verifies the dedicated server director's rules. */
+static int halo_server_mode(void) { return FALSE; }
+static int server_director_ok_to_countdown(long players, boolean teams)
+{ (void)players; (void)teams; return FALSE; }
 static int network_game_server_have_all_machines_have_precached(struct network_game_server *s) {(void)s;return precached;}
 static int network_game_server_start_network_game(struct network_game_server *s) {(void)s;starts++;return 1;}
 static void network_event(const char *fmt, ...) {(void)fmt;}

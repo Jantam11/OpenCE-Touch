@@ -1,0 +1,136 @@
+name: Validate OpenCE Android integration
+on:
+  push:
+    branches:
+      - integration/upstream-2026-11-04
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Only the newest source candidate needs costly native and regression jobs.
+# This workflow never uploads GitHub Actions artifacts.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Source and platform regression suite
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y -q gcc-multilib
+          python3 -m pip install -q pytest
+          grep -Eq '^[[:space:]]*#define HALO_PORT_NETWORK_VERSION 41' port/linux/include/halo_port_limits.h
+          python3 -c 'from tools import network_format; problems = network_format.check(); problems and __import__("sys").exit("\n".join(problems))'
+          test -f port/android/app/src/main/java/com/halo/decomp/TouchRegions.java
+          python3 tools/test_android_touch.py
+          python3 tools/test_touch_regions.py
+          python3 tools/test_android_mobile.py
+          python3 tools/test_android_render_quit.py
+          python3 tools/test_camera_touch.py
+          python3 tools/test_android_touch_merge.py
+          python3 tools/test_touch_layout.py
+          python3 tools/test_android_release_features.py
+          python3 tools/test_virtual_keyboard_input.py
+          python3 tools/test_android_chat.py
+          python3 tools/test_android_master_bridge.py
+          python3 tools/test_tick_input.py
+          python3 -m pytest -q tools/test_touch_menu.py tools/harness tools/test_net_compare.py tools/test_profile.py
+      - name: Additional upstream Android rendering coverage
+        run: |
+          set -euo pipefail
+          python3 tools/test_android_ce_texture_cache.py
+          python3 tools/test_android_mirror_uploads.py
+          python3 tools/test_android_render_policy.py
+          python3 tools/test_android_static_geometry.py
+          python3 tools/test_controller_remap.py
+          python3 tools/test_controller_buttons.py
+
+  android:
+    needs: regressions
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare native toolchain
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/tools"
+          curl -fsSL -o ninja.zip https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-linux.zip
+          curl -fsSL -o ccache.tar.xz https://github.com/ccache/ccache/releases/download/v4.10.2/ccache-4.10.2-linux-x86_64.tar.xz
+          sha256sum -c - <<'EOF'
+          6f98805688d19672bd699fbbfa2c2cf0fc054ac3df1f0e6a47664d963d530255  ninja.zip
+          80cab87bd510eca796467aee8e663c398239e0df1c4800a0b5dff11dca0b4f18  ccache.tar.xz
+          EOF
+          unzip -q ninja.zip -d "$RUNNER_TEMP/tools" && rm ninja.zip
+          tar -xJf ccache.tar.xz -C "$RUNNER_TEMP/tools" --strip-components=1 ccache-4.10.2-linux-x86_64/ccache && rm ccache.tar.xz
+          echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+      - uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-android-integration-${{ github.sha }}
+          restore-keys: ccache-android-
+      - uses: actions/cache@v4
+        with:
+          path: build/android/third_party
+          key: android-third-party-${{ hashFiles('tools/android_build.py', 'tools/build_android_bink.py', 'port/android/patches/**') }}
+          restore-keys: android-third-party-
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('port/android/**/*.gradle*', 'port/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-
+      - name: Android debug build
+        run: python3 tools/ci_build.py android debug
+      - name: Android release build
+        run: python3 tools/ci_build.py android release
+      - name: Verify packaged Android APK layout and legal files
+        run: |
+          set -euo pipefail
+          python3 tools/test_android_release_features.py
+          test -s dist/halo-android-release/app-release.apk
+          test -s dist/halo-android-release/FFmpeg-LGPL.txt
+          test -s dist/halo-android-release/bink-relink.zip
+          test -s dist/halo-android-release/opus-COPYING.txt
+          test -s dist/halo-android-release/lucide-LICENSE.txt
+
+      - name: Publish Android test APK as prerelease (never stable)
+        if: github.repository == 'Jantam11/OpenCE-Touch' && github.ref == 'refs/heads/integration/upstream-2026-11-04'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TEST_TAG: v0.6.4-touch-rc2
+        run: |
+          set -euo pipefail
+          test "$GITHUB_SHA" = "$(git rev-parse HEAD)"
+          if gh release view "$TEST_TAG" >/dev/null 2>&1; then
+            echo "::error::Test tag already exists; do not overwrite previous candidate."
+            exit 1
+          fi
+          mkdir -p release
+          cp dist/halo-android-release/app-release.apk release/OpenCE-Touch-test.apk
+          (cd dist/halo-android-release && zip -qr "$GITHUB_WORKSPACE/release/halo-android-release-test.zip" .)
+          (cd release && sha256sum OpenCE-Touch-test.apk halo-android-release-test.zip > SHA256SUMS.txt)
+          cat > notes.md <<'EOF'
+          # OpenCE-Touch 0.6.4 RC2 - Android startup fix test
+
+          **Experimental APK for hardware and upstream protocol-41 multiplayer interoperability tests. Not a stable release.**
+
+          Download **OpenCE-Touch-test.apk** for the ARM64 Android test build. The companion ZIP includes the APK, FFmpeg LGPL/source-relinking materials and other dependency notices. SHA256SUMS.txt contains hashes for both downloads.
+
+          This candidate fixes the RC1 native startup SIGSEGV caused by a mismatched OpenGL ES capability logging format string. It retains OpenCE upstream changes and OpenCE-Touch layouts, Xash-style regions, gyro, gamepad, HUD editor, and other mobile features. Android compilation and automated regressions pass; physical Android checks and live Linux/Windows multiplayer testing have **not** yet been certified.
+
+          **Installation:** Back up game data and profiles before testing. CI uses a temporary signing key, so upgrading over an existing install may fail; uninstalling an existing version can remove app data. Do not treat this as a validated upgrade.
+          EOF
+          gh release create "$TEST_TAG" release/OpenCE-Touch-test.apk release/halo-android-release-test.zip release/SHA256SUMS.txt --target "$GITHUB_SHA" --prerelease --title "OpenCE-Touch v0.6.4 RC2 (Android startup fix test)" --notes-file notes.md

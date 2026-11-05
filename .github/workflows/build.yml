@@ -22,6 +22,8 @@ name: Build
 # site on GitHub Pages (https://halocombatevolved.com/, port/web/README.md).
 on:
   push:
+    branches-ignore:
+      - 'integration/upstream-2026-11-04'
     paths-ignore:
       - "**.md"
   workflow_dispatch:
@@ -236,7 +238,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: v0.6.3-touch
+          TAG: v0.6.4-touch
         run: python3 tools/publish_touch_release.py
 
   windows:

@@ -1,5 +1,8 @@
 /* Touch controls are an SDL gamepad, never a text keyboard. All SDL joystick
  * changes run through its Update callback; Android only writes the snapshot. */
+#include <stdint.h>
+#include <string.h>
+#include <time.h>
 #include "host.h"
 #include "touch_state.h"
 #include <SDL3/SDL.h>

@@ -73,6 +73,8 @@ typedef int SDL_GamepadAxis;
 typedef struct { int id, type, virtual_pad, held; } SDL_Gamepad;
 static SDL_Gamepad pads[] = {{1, 2, 0, 0}, {2, 0, 0, 0}, {3, 1, 1, 0}};
 static int listed = 3, split = 1;
+/* Upstream's 4-player join state, used by the extracted production functions. */
+static BOOL keyboard_alone_wanted, keyboard_alone, keyboard_join_down, virtual_keyboard_join;
 static SDL_JoystickID *SDL_GetGamepads(int *count) {
     int *ids = malloc(3 * sizeof(int));
     *count = listed;

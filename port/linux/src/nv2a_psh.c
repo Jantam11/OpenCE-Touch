@@ -389,6 +389,8 @@ static void texture_stage(struct xgpu_text *text, const struct nv2a_pixel_shader
 		xgpu_text_append(text, "\tt%d = ", stage);
 		sample(text, key, stage, coordinates);
 		xgpu_text_append(text, ";\n");
+		if (stage == 0 && key->ce_meter_channels)
+			xgpu_text_append(text, "\tt0 = t0.aaar;\n");
 		if (stage == 0 && key->point_threshold && key->sampler_type[stage] == _xgpu_sampler_2d)
 		{
 			/* IDs must not be averaged with another segment or corrupted by
@@ -776,8 +778,9 @@ char *nv2a_pixel_shader_to_glsl(const struct nv2a_pixel_shader_key *key)
 	if (key->count_samples)
 		xgpu_text_append(&text, "\tatomicCounterIncrement(visible_samples);\n");
 #endif
+	/* (display.reversed_depth: turned around, as the device's depth is) */
 	if (replaces_depth(key))
-		xgpu_text_append(&text, "\tgl_FragDepth = replaced_depth;\n");
+		xgpu_text_append(&text, "\tgl_FragDepth = %sreplaced_depth;\n", xgpu_reversed_depth ? "1.0 - " : "");
 	if (key->source_blend)
 	{
 		static const char *const factors[] =

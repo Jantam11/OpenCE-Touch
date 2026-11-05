@@ -391,7 +391,7 @@ public final class TouchControls extends View implements android.hardware.Sensor
                     if (role == TouchRegions.MOVE) TouchInput.move(regions.moveX, regions.moveY);
                     else if (role == TouchRegions.LOOK) mouseMove(regions.lookX*sensitivity, regions.lookY*sensitivity, true);
                 }
-                else if (f.control.kind == AIM || f.control.kind == BUTTON && f.action == PAD+16)
+                else if (f.control.kind == AIM || f.control.kind == BUTTON && f.action == PAD+16 && settings.fireDragAim)
                     mouseMove(dx*sensitivity,dy*sensitivity,true);
                 else if (f.control.kind == MOVE) {
                     float r = radius(f.control), mx = (x-f.downX)/r, my = (y-f.downY)/r;
@@ -633,6 +633,7 @@ public final class TouchControls extends View implements android.hardware.Sensor
         settings.fps = prefs.getBoolean("fps", false); settings.icons = prefs.getBoolean("icons", true);
         settings.overlayDisabled = prefs.getBoolean("overlay-disabled", false);
         settings.screenRegions = prefs.getBoolean("screen-regions", false);
+        settings.fireDragAim = prefs.getBoolean("fire-drag-aim", true);
         settings.moveRight = prefs.getBoolean("region-move-right", false);
         settings.regionSplit = regionPreference("region-split", .5f, .2f, .8f);
         settings.sideZone = regionPreference("region-side-zone", .06f, .02f, .3f);
@@ -660,6 +661,7 @@ public final class TouchControls extends View implements android.hardware.Sensor
             .putBoolean("fps",settings.fps).putBoolean("icons",settings.icons)
             .putBoolean("overlay-disabled",settings.overlayDisabled)
             .putBoolean("screen-regions",settings.screenRegions).putBoolean("region-move-right",settings.moveRight)
+            .putBoolean("fire-drag-aim",settings.fireDragAim)
             .putFloat("region-split",settings.regionSplit).putFloat("region-side-zone",settings.sideZone)
             .putFloat("region-forward-zone",settings.forwardZone)
             .putFloat("gyro-sensitivity",settings.gyroSensitivity).putFloat("fov",settings.fov).apply();
@@ -710,7 +712,8 @@ public final class TouchControls extends View implements android.hardware.Sensor
         String[] rows = {"Gyroscope: " + (gyroscope == null ? "unavailable" : settings.gyro ? "ON" : "OFF"),
             "Gyroscope sensitivity", "Rumble: " + (vibrator == null || !vibrator.hasVibrator() ? "unavailable" : settings.rumble ? "ON" : "OFF"),
             "FPS counter: " + (settings.fps ? "ON" : "OFF"), "Field of view: " + Math.round(settings.fov),
-            "Halo icons: " + (settings.icons ? "ON" : "OFF"), "Disable overlay: " + (settings.overlayDisabled ? "ON" : "OFF"), "Edit in-game HUD"};
+            "Halo icons: " + (settings.icons ? "ON" : "OFF"), "Disable overlay: " + (settings.overlayDisabled ? "ON" : "OFF"), "Edit in-game HUD",
+            "Fire button drag aiming: " + (settings.fireDragAim ? "ON" : "OFF")};
         new AlertDialog.Builder(activity).setTitle("General settings").setItems(rows,(d,i)->{
             releaseAll();
             if (i == 7) { hudEditing = true; hudPointer = hudPanel = -1;
@@ -728,6 +731,7 @@ public final class TouchControls extends View implements android.hardware.Sensor
             else if (i == 3) settings.fps = !settings.fps;
             else if (i == 5) settings.icons = !settings.icons;
             else if (i == 6) settings.overlayDisabled = !settings.overlayDisabled;
+            else if (i == 8) settings.fireDragAim = !settings.fireDragAim;
             saveFeatures(); generalSettings();
         }).setNegativeButton("Close",null).show();
     }
@@ -812,6 +816,7 @@ public final class TouchControls extends View implements android.hardware.Sensor
         settings.gyro=c.gyro;settings.gyroSensitivity=c.gyroSensitivity;settings.rumble=c.rumble;settings.fps=c.fps;settings.fov=c.fov;
         settings.icons=c.icons;settings.overlayDisabled=c.overlayDisabled;
         settings.screenRegions=c.screenRegions;settings.moveRight=c.moveRight;settings.regionSplit=c.regionSplit;
+        settings.fireDragAim=c.fireDragAim;
         settings.sideZone=c.sideZone;settings.forwardZone=c.forwardZone;
         for(Control control:controls)bound(control); save();saveFeatures();
     }

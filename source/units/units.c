@@ -644,6 +644,7 @@ symbols in this file:
 /* ---------- headers */
 
 #include "cseries.h"
+#include "infection.h" /* port: port/linux/game/infection.c */
 #include "units.h"
 
 #include "bipeds.h"
@@ -662,6 +663,7 @@ symbols in this file:
 #include "effects/effects.h"
 #include "effects/material_effect_definitions.h"
 #include "game/cheats.h"
+#include "game/game.h" /* port: game_connection (unit_turns_with_aim) */
 #include "game/game_allegiance.h"
 #include "game/game_globals.h"
 #include "game/game_engine.h"
@@ -2156,6 +2158,10 @@ boolean unit_add_grenade_to_inventory(
 	boolean result = FALSE;
 	static boolean grenade_type_reported = FALSE;
 
+	/* port: an Infection zombie takes no grenades */
+	if (infection_unit_is_zombie(unit_index))
+		return FALSE;
+
 	match_assert(
 		"c:\\halo\\SOURCE\\units\\units.c",
 		7282,
@@ -2219,6 +2225,9 @@ boolean unit_add_equipment_to_inventory(
 		7330,
 		equipment_definition->equipment.powerup_type!=_equipment_powerup_grenade);
 
+	/* port: nor powerups */
+	if (infection_unit_is_zombie(unit_index))
+		return FALSE;
 	if (unit->unit.equipment_object_index!=NONE && replace==TRUE)
 	{
 		object_delete(unit->unit.equipment_object_index);
@@ -3054,6 +3063,9 @@ boolean unit_enter_seat(
 {
 	boolean result = FALSE;
 
+	/* port: and fights on foot */
+	if (infection_unit_is_zombie(unit_index))
+		return FALSE;
 	if (unit_can_enter_seat(unit_index, target_unit_index, seat_index, NULL))
 	{
 		struct unit_datum *unit = unit_get(unit_index);
@@ -3329,14 +3341,31 @@ static char const *const enhanced_animation_units[] =
 	"cyborg_mp",
 };
 
+/* whether the unit is one of the player bipeds the enhancements were made
+for */
+static boolean unit_animation_enhanced_unit(
+	long unit_index)
+{
+	struct unit_datum *unit = unit_get(unit_index);
+	char const *name = tag_name_strip_path(tag_get_name(unit->definition_index));
+	long name_index;
+
+	for (name_index = 0; name_index < NUMBEROF(enhanced_animation_units); name_index++)
+	{
+		if (!_stricmp(name, enhanced_animation_units[name_index]))
+		{
+			return TRUE;
+		}
+	}
+
+	return FALSE;
+}
+
 boolean unit_animation_enhanced(
 	long unit_index)
 {
 	static boolean enhanced = TRUE;
 	static unsigned long read_at = (unsigned long)-1;
-	struct unit_datum *unit;
-	char const *name;
-	long name_index;
 
 	/* (read again when the settings change) */
 	if (read_at != config_changes())
@@ -3348,17 +3377,26 @@ boolean unit_animation_enhanced(
 	{
 		return FALSE;
 	}
-	unit = unit_get(unit_index);
-	name = tag_name_strip_path(tag_get_name(unit->definition_index));
-	for (name_index = 0; name_index < NUMBEROF(enhanced_animation_units); name_index++)
-	{
-		if (!_stricmp(name, enhanced_animation_units[name_index]))
-		{
-			return TRUE;
-		}
-	}
+	return unit_animation_enhanced_unit(unit_index);
+}
 
-	return FALSE;
+/* port: whether a player biped turns with the aim where the original left
+its body facing (throwing a grenade, in the air: bipeds.c's
+biped_update_turning). It moves where a shot goes, not only how the body
+looks, so in a network game every machine turns them, whatever its own
+game.enhanced_animations says: a player who turned it off would otherwise
+aim differently from the others, and a client and its host would turn that
+player's body differently. In a game of one machine the setting decides,
+as for the other enhancements. */
+boolean unit_turns_with_aim(
+	long unit_index)
+{
+	if (game_connection() == _game_connection_network_client ||
+		game_connection() == _game_connection_network_server)
+	{
+		return unit_animation_enhanced_unit(unit_index);
+	}
+	return unit_animation_enhanced(unit_index);
 }
 
 /* port: a seat whose graph has no reload of its own (a Scorpion rider's)
@@ -7749,8 +7787,13 @@ boolean unit_drop_selected_weapon(
 		TEST_FLAG(weapon_definition_get(weapon_get(weapon_index)->definition_index)->weapon.flags,
 			_weapon_doesnt_count_toward_maximum_bit))
 	{
+		/* port: (an Infection zombie keeps its skull: infection.c) */
+		if (!infection_allow_weapon_drop(unit_index, unit_get_current_weapon_index(unit_index)))
+			return FALSE;
 		return unit_drop_current_weapon(unit_index, TRUE);
 	}
+	if (!infection_allow_weapon_drop(unit_index, weapon_index))
+		return FALSE;
 	unit_drop_item(unit_index, weapon_index);
 	unit->unit.weapon_object_indices[slot] = NONE;
 	unit->unit.desired_weapon_index = unit->unit.current_weapon_index!=NONE ?
@@ -9087,8 +9130,11 @@ void unit_cause_player_melee_damage(
 						long hit_object_index = collision.object_index;
 						struct object_datum *hit_object = object_get(hit_object_index);
 
+						/* port: (an Infection zombie's skull hits a rider in an open
+						seat itself: infection.c) */
 						if (hit_object->object.type!=_object_type_weapon &&
-							hit_object->object.parent_object_index!=NONE)
+							hit_object->object.parent_object_index!=NONE &&
+							!infection_melee_rider_target(unit_index, hit_object_index))
 						{
 							hit_object_index = hit_object->object.parent_object_index;
 							hit_object = object_get(hit_object_index);
@@ -9198,6 +9244,9 @@ void unit_cause_player_melee_damage(
 			struct damage_data damage_data;
 
 			damage_data_new(&damage_data, melee_damage_effect_index);
+			/* port: an Infection zombie's skull's (a client's report the host
+			works out again: network_damage.c) */
+			damage_data.multiplier = infection_melee_multiplier(unit_index);
 			SET_FLAG(damage_data.flags, _damage_area_of_effect_bit, TRUE);
 			damage_data.location = unit->object.location;
 			damage_data.owner_object_index = unit_index;

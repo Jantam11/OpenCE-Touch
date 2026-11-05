@@ -77,6 +77,8 @@ symbols in this file:
 #include "tag_files/tag_groups.h"
 #include "units/unit_definitions.h"
 #include "units/units.h"
+#include "custom_edition_hud.h" /* port: CE warning placement and reticle classification */
+#include "hud_hires_crosshairs.h" /* port: port/linux/game/hud_hires_tags.c */
 
 #include <math.h>
 #include <string.h>
@@ -1249,7 +1251,7 @@ static void crosshairs_draw(
 										item->sequence_index;
 									/* port: the bitmap (the sprite's, or the item's own) must be
 									one the group has, or the item isn't drawn */
-									struct bitmap_data *bitmap = bitmap_index >= 0 && bitmap_index < bitmap_group->bitmaps.count ?
+									struct bitmap_data const *bitmap = bitmap_index >= 0 && bitmap_index < bitmap_group->bitmaps.count ? /* port: replacement is read-only */
 										TAG_BLOCK_GET_ELEMENT(
 											&bitmap_group->bitmaps,
 											bitmap_index,
@@ -1264,6 +1266,8 @@ static void crosshairs_draw(
 									}
 									if (bitmap && _texture_cache_bitmap_get_hardware_format(bitmap, FALSE, TRUE))
 									{
+										/* port: replace only supplied CE scope sprites, preserving its original 8x. */
+										bitmap = hud_hires_crosshair_bitmap(bitmap, item->sequence_index, frame_index);
 										if (TEST_FLAG(item->flags, _hud_crosshair_hide_outside_area_bit))
 										{
 											real texel_scale_u = 1.0f;
@@ -1312,10 +1316,17 @@ static void crosshairs_draw(
 										}
 										else
 										{
+											/* port: CE warnings retain HUD coordinates, independent
+											of the aiming reticle's FOV and passenger projection. */
+											struct hud_placement_definition placement = item->placement;
+											custom_edition_hud_warning_placement(state_index,
+												(short)(render.camera.window_bounds.x1 - render.camera.window_bounds.x0),
+												(short)(render.camera.window_bounds.y1 - render.camera.window_bounds.y0),
+												&placement);
 											hud_draw_bitmap(
 												bitmap,
 												&absolute_placement,
-												&item->placement,
+												&placement,
 												sequence ?
 													&TAG_BLOCK_GET_ELEMENT(&sequence->sprites, frame_index, struct bitmap_group_sprite)->bounds :
 													NULL,
@@ -1327,7 +1338,8 @@ static void crosshairs_draw(
 												/* port: a reticle, scaled with display.fov
 												(view_fov.c); a scope's picture keeps its
 												place */
-												state_index != _crosshair_state_zoom);
+												state_index != _crosshair_state_zoom &&
+												!custom_edition_hud_warning(state_index));
 										}
 									}
 								}
