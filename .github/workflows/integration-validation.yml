@@ -53,6 +53,9 @@ jobs:
           python3 tools/test_controller_buttons.py
 
   android:
+    needs: regressions
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -100,3 +103,34 @@ jobs:
           test -s dist/halo-android-release/bink-relink.zip
           test -s dist/halo-android-release/opus-COPYING.txt
           test -s dist/halo-android-release/lucide-LICENSE.txt
+
+      - name: Publish Android test APK as prerelease (never stable)
+        if: github.repository == 'Jantam11/OpenCE-Touch' && github.ref == 'refs/heads/integration/upstream-2026-11-04'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TEST_TAG: v0.6.4-touch-rc1
+        run: |
+          set -euo pipefail
+          test "$GITHUB_SHA" = "$(git rev-parse HEAD)"
+          if gh release view "$TEST_TAG" >/dev/null 2>&1; then
+            echo "::error::Test tag already exists; do not overwrite previous candidate."
+            exit 1
+          fi
+          mkdir -p release
+          cp dist/halo-android-release/app-release.apk release/OpenCE-Touch-test.apk
+          (cd dist/halo-android-release && zip -qr "$GITHUB_WORKSPACE/release/halo-android-release-test.zip" .)
+          (cd release && sha256sum OpenCE-Touch-test.apk halo-android-release-test.zip > SHA256SUMS.txt)
+          cat > notes.md <<'EOF'
+          # OpenCE-Touch 0.6.4 - Android integration test
+
+          **Experimental APK for hardware and upstream protocol-41 multiplayer interoperability tests. Not a stable release.**
+
+          Download **OpenCE-Touch-test.apk** for the ARM64 Android test build. The companion ZIP includes the APK, FFmpeg LGPL/source-relinking materials and other dependency notices. SHA256SUMS.txt contains hashes for both downloads.
+
+          This candidate integrates OpenCE upstream changes with OpenCE-Touch layouts, Xash-style regions, gyro, gamepad, HUD editor, and other mobile features. Android compilation and automated regressions pass; physical Android checks and live Linux/Windows multiplayer testing have **not** yet been certified.
+
+          **Installation:** Back up game data and profiles before testing. CI uses a temporary signing key, so upgrading over an existing install may fail; uninstalling an existing version can remove app data. Do not treat this as a validated upgrade.
+          EOF
+          gh release create "$TEST_TAG" release/OpenCE-Touch-test.apk release/halo-android-release-test.zip release/SHA256SUMS.txt --target "$GITHUB_SHA" --prerelease --title "OpenCE-Touch v0.6.4 RC1 (Android test)" --notes-file notes.md
