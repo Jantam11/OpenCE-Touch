@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.4-touch — 2026-11-04
+## 0.6.4-touch — 2026-11-05
 
 - Updated the original OpenCE engine through upstream commit [899219c](https://github.com/OpenCommunityEdition/OpenCE/commit/899219cc0a14b03bc12f0517a1e9ee4c37158af8). **Multiplayer protocol 41** replaces protocol 32; older OpenCE-Touch builds cannot join servers using the newer protocol.
 - Added Android resolution scaling (original, 25%, 50%, 75%, native), frame-rate controls, compatible GPU texture/rendering optimizations, and new graphics diagnostic options.
@@ -8,12 +8,13 @@
 - Added OpenCE's SWAT, Infection, Gun Game and Hardcore gametypes, expanded bot skill levels, controller recognition/remapping, more split-screen options and multiplayer voting improvements.
 - Retained the fork's **editable Android controls**, optional Xash-style screen regions, gyroscope, custom layout imports/presets, HUD editor, themes, disc/movie features and Android-only release packaging. Added **General settings → Fire button drag aiming**, enabled by default as before; it can be turned off and is included in layout exports.
 - Fixed integration conflicts involving touch/free-camera routing, SDL/controller initialization, Android rendering declarations, master-server HTTPS access, dedicated co-op flags and menu registration.
+- Fixed the RC1 native startup crash (SIGSEGV at 0x1) caused by mismatched OpenGL ES logging placeholders and arguments; added a regression test.
 
-**Compatibility and testing:** The network format/version declarations match OpenCE protocol 41, but no physical Android gameplay or live multiplayer server interoperability has been verified here. Do not assume older clients are compatible. Back up saves and layouts before installing; a temporary CI signing key may require uninstalling the old APK. The project uses the existing Android CI test/build/release gates before publication.
+**Compatibility and testing:** The RC2 APK launched and network gameplay worked on a real Android phone, with cross-platform peers believed to be involved. Complete Android ↔ Windows/Linux interoperability remains unverified. Automated Android builds and regressions passed. Network protocol 41 cannot join older protocol-32 clients. Back up saved games and layouts before reinstalling or changing APK signing keys.
 
 **Credits:** [OpenCE contributors](https://github.com/OpenCommunityEdition/OpenCE) for upstream changes; [Xash3D-FWGS contributors](https://github.com/FWGS/xash3d-fwgs), [FulGerNet/theLlamaNet](https://github.com/FulGerNet/halo-ce-android), fqlx and prior credited contributors for features retained from earlier OpenCE-Touch versions.
 
-[Changes since v0.6.3](https://github.com/Jantam11/OpenCE-Touch/compare/v0.6.3-touch...touch-controls)
+[Changes since v0.6.3](https://github.com/Jantam11/OpenCE-Touch/compare/v0.6.3-touch...v0.6.4-touch)
 
 ## 0.6.3-touch — 2026-10-22
 
