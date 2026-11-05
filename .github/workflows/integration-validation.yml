@@ -27,6 +27,7 @@ jobs:
           sudo apt-get install -y -q gcc-multilib
           python3 -m pip install -q pytest
           grep -Eq '^[[:space:]]*#define HALO_PORT_NETWORK_VERSION 41' port/linux/include/halo_port_limits.h
+          python3 -c 'from tools import network_format; problems = network_format.check(); problems and __import__("sys").exit("\n".join(problems))'
           test -f port/android/app/src/main/java/com/halo/decomp/TouchRegions.java
           python3 tools/test_android_touch.py
           python3 tools/test_touch_regions.py
@@ -38,6 +39,7 @@ jobs:
           python3 tools/test_android_release_features.py
           python3 tools/test_virtual_keyboard_input.py
           python3 tools/test_android_chat.py
+          python3 tools/test_android_master_bridge.py
           python3 tools/test_tick_input.py
           python3 -m pytest -q tools/test_touch_menu.py tools/harness tools/test_net_compare.py tools/test_profile.py
       - name: Additional upstream Android rendering coverage

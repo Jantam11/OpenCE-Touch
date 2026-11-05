@@ -1,3 +1,11 @@
+# 2026-11-05 — protocol-41 verification follow-up
+
+The previous candidate commit `2e1b303` passed [Android integration CI 41884842427](https://github.com/Jantam11/OpenCE-Touch/actions/runs/41884842427): Android debug and release builds, APK/license checks, and 1518 regression cases (5 skipped, 7 subtests). OpenCE upstream `main` remains at `899219cc` (November 1). The fork's `network_format.txt` blob exactly matches upstream main at that pinned commit.
+
+The isolated branch now adds explicit CI checks that the production network wire-format snapshot still matches protocol 41, and compiles/tests the Android host's HTTPS master-list response bridge against a deterministic fake transport, including signed-response headers, JSON body, status and TLS failure handling. This test uses no game assets and never makes live network requests.
+
+**Validation boundary:** These new checks require a clean CI rerun on their own final commit. Neither CI nor equal protocol versions demonstrate Android-to-upstream live multiplayer compatibility. Before merging/publishing, still test a signed debug/release APK on the actual phone: default and Xash region controls, firing/drag aim, gyro, menus/chat, profile creation, map import, renderer and movies; then direct-host and dedicated-server joins against an upstream protocol-41 build, co-op progression, game modes, disconnect/reconnect, and voice if enabled. Record Android logcat and peer/server logs. Preserve `touch-controls`/v0.6.3-touch until validated.
+
 # 2026-11-04 — OpenCE main integration / candidate v0.6.4-touch
 
 Integration branch: `integration/upstream-2026-11-04`, draft PR #3. Upstream pinned at
